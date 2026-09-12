@@ -23,7 +23,7 @@ const server = new McpServer({
   version: "0.1.0",
 });
 
-function schemaFor(specName: string) {
+function schemaFor(specName: string): Record<string, z.ZodTypeAny> {
   if (specName === "environment.read") {
     return { channelId: z.string() };
   }
@@ -38,6 +38,14 @@ function schemaFor(specName: string) {
       kind: z.string(),
       summary: z.string(),
       payload: z.record(z.unknown()).optional(),
+    };
+  }
+  if (specName === "ambiguous.task") {
+    return {
+      title: z.string(),
+      assignee: z.string(),
+      description: z.string().optional(),
+      urgency: z.string().optional(),
     };
   }
   if (specName === "health.ping") return { note: z.string().optional() };

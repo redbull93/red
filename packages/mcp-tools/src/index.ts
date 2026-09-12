@@ -2,16 +2,19 @@ import { environmentRead, environmentReceipt } from "./tools/environment-io";
 import { searchWeb } from "./tools/exa-search";
 import { worldAct } from "./tools/act-receipt";
 import { healthFail, healthPing, healthRetry } from "./tools/health-fail";
+import { ambiguousTask } from "./tools/ambiguous-workspace";
 import type { ToolContext, ToolResult, ToolSpec } from "./types";
 
 export type { PlaceSnapshot, ToolContext, ToolResult, ToolSpec } from "./types";
 export { createMemoryPlace } from "./memory-place";
+export { ambiguousTask } from "./tools/ambiguous-workspace";
 
 export const toolSpecs: ToolSpec[] = [
   environmentRead,
   environmentReceipt,
   searchWeb,
   worldAct,
+  ambiguousTask,
   healthPing,
   healthFail,
   healthRetry,
