@@ -31,6 +31,8 @@ export type EnvironmentEvent = {
   principal?: string;
   requireHitl?: boolean;
   forceFail?: boolean;
+  orgId?: string;
+  authenticatedUser?: ApproverIdentity;
 };
 
 export type AgentContext = EnvironmentEvent & {
@@ -58,6 +60,15 @@ export type TraceEvent = {
   data?: Record<string, unknown>;
 };
 
+export type ApproverIdentity = {
+  userId: string;
+  email?: string;
+  name?: string;
+  roles?: string[];
+  permissions?: string[];
+  orgId?: string;
+};
+
 export type ApprovalStatus = "pending" | "approved" | "stopped" | "expired";
 
 export type Approval = {
@@ -69,8 +80,12 @@ export type Approval = {
   preview: string;
   risk: "low" | "medium" | "high";
   principal: string;
+  requiredRole?: string;
   status: ApprovalStatus;
   expiresAt: string;
+  resolvedBy?: ApproverIdentity;
+  resolvedAt?: string;
+  orgId?: string;
 };
 
 export type JobStatus =
@@ -98,6 +113,8 @@ export type Receipt = {
   channelId: string;
   body: string;
   at: string;
+  approvedBy?: ApproverIdentity;
+  orgId?: string;
 };
 
 export type RunStatus =
@@ -123,4 +140,61 @@ export type EngineSnapshot = {
   jobs: Job[];
   receipts: Receipt[];
   signals: AgentContext[];
+  usage?: UsageRecord[];
+  blockers?: BlockerRecord[];
+};
+
+// ── Cross-Run Memory ──────────────────────────────────────────────
+
+export type BlockerRecord = {
+  /** Actor who is blocked. */
+  from: string;
+  /** Actor causing the block. */
+  to: string;
+  /** Short description extracted from signal text. */
+  topic: string;
+  /** Channel where the blocker was first seen. */
+  channelId: string;
+  /** ISO timestamp of first occurrence. */
+  firstSeen: string;
+  /** ISO timestamp of most recent occurrence. */
+  lastSeen: string;
+  /** Run IDs where this blocker appeared. */
+  runIds: string[];
+  /** Number of consecutive stand-ups this blocker has persisted. */
+  streak: number;
+  /** Whether it has been resolved by a receipt or explicit resolution. */
+  resolved: boolean;
+  /** Organization tenancy ID (Auth0 Org). */
+  orgId?: string;
+};
+
+// ── Output Guardrails ─────────────────────────────────────────────
+
+export type GuardrailViolation = {
+  rule: string;
+  detail: string;
+  severity: "warn" | "block";
+};
+
+export type GuardrailResult = {
+  pass: boolean;
+  violations: GuardrailViolation[];
+  checkedAt: string;
+};
+
+// ── Cost & Token Tracking ─────────────────────────────────────────
+
+export type UsageRecord = {
+  runId: string;
+  turnIndex: number;
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  estimatedCostUsd: number;
+  stub: boolean;
+  at: string;
+  orgId?: string;
+  userId?: string;
 };

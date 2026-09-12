@@ -7,6 +7,8 @@ import type {
   Run,
   TraceEvent,
 } from "./types";
+import { getAllUsage } from "./usage";
+import { getAllBlockers } from "./memory";
 
 export class EngineStore {
   runs: Run[] = [];
@@ -24,6 +26,8 @@ export class EngineStore {
       jobs: [...this.jobs].reverse(),
       receipts: [...this.receipts].reverse(),
       signals: [...this.signals].reverse(),
+      usage: getAllUsage(),
+      blockers: getAllBlockers(),
     };
   }
 }
@@ -37,3 +41,4 @@ export function getStore(): EngineStore {
   if (!g[globalKey]) g[globalKey] = new EngineStore();
   return g[globalKey];
 }
+

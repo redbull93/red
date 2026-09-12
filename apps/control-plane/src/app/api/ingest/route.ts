@@ -1,5 +1,6 @@
 import { fixtureEvent, ingestEnvironmentEvent } from "@red/orchestrator";
 import { NextResponse } from "next/server";
+import { getAuthenticatedUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,10 @@ export async function POST(request: Request) {
     environmentKind?: string;
     signalBody?: string;
     placeOnlyContext?: string;
+    orgId?: string;
   };
+
+  const user = await getAuthenticatedUser(request);
 
   const run = await ingestEnvironmentEvent(
     fixtureEvent({
@@ -20,8 +24,10 @@ export async function POST(request: Request) {
       placeOnlyContext: body.placeOnlyContext,
       requireHitl: body.mode === "hitl",
       forceFail: body.mode === "fail",
+      orgId: body.orgId ?? user?.orgId,
+      authenticatedUser: user,
     }),
   );
 
-  return NextResponse.json({ run });
+  return NextResponse.json({ run, user });
 }

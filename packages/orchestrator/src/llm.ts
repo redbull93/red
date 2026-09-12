@@ -1,4 +1,5 @@
 import { openaiToolDefinitions } from "@red/mcp-tools";
+import { recordUsage, recordStubUsage } from "./usage";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant" | "tool";
@@ -19,6 +20,13 @@ export type LlmTurn = {
   stub: boolean;
 };
 
+export type TurnContext = {
+  runId: string;
+  turnIndex: number;
+  orgId?: string;
+  userId?: string;
+};
+
 type ChatCompletion = {
   choices?: Array<{
     message?: {
@@ -29,62 +37,74 @@ type ChatCompletion = {
       }>;
     };
   }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
 };
 
 export function hasModelKey() {
-  return Boolean(process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY);
+  return Boolean(
+    process.env.OPENAI_API_KEY ||
+      process.env.OPENROUTER_API_KEY ||
+      process.env.AI_GATEWAY_API_KEY ||
+      process.env.MODEL_API_KEY,
+  );
 }
 
-export async function completeTurn(messages: ChatMessage[]): Promise<LlmTurn> {
-  if (!hasModelKey()) {
+export async function completeTurn(
+  messages: ChatMessage[],
+  ctx?: TurnContext,
+): Promise<LlmTurn> {
+  let model = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
+  const apiKey =
+    process.env.OPENAI_API_KEY ??
+    process.env.OPENROUTER_API_KEY ??
+    process.env.AI_GATEWAY_API_KEY ??
+    process.env.MODEL_API_KEY;
+
+  if (!apiKey) {
+    if (ctx) {
+      recordStubUsage(ctx.runId, ctx.turnIndex, {
+        orgId: ctx.orgId,
+        userId: ctx.userId,
+      });
+    }
     return stubTurn(messages);
   }
 
   const openRouter = Boolean(process.env.OPENROUTER_API_KEY);
-  const url = openRouter
-    ? "https://openrouter.ai/api/v1/chat/completions"
-    : "https://api.openai.com/v1/chat/completions";
-  const key = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
-  const model = openRouter
-    ? process.env.OPENROUTER_MODEL || "openai/gpt-4.1-mini"
-    : process.env.OPENAI_MODEL || "gpt-4.1-mini";
+  const baseURL = openRouter
+    ? "https://openrouter.ai/api/v1"
+    : (process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1");
 
-  const response = await fetch(url, {
+  if (openRouter && !model.includes("/")) {
+    model = `openai/${model}`;
+  }
+
+  const response = await fetch(`${baseURL}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${key}`,
-      ...(openRouter
-        ? {
-            "HTTP-Referer": "https://github.com/redbull93/red",
-            "X-Title": "red environment-first kit",
-          }
-        : {}),
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model,
-      messages: messages.map((m) => {
-        if (m.role === "tool") {
-          return {
-            role: "tool",
-            tool_call_id: m.tool_call_id,
-            content: m.content,
-          };
-        }
-        return { role: m.role, content: m.content };
-      }),
+      messages,
       tools: openaiToolDefinitions(),
       tool_choice: "auto",
     }),
   });
 
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`LLM ${response.status}: ${detail.slice(0, 400)}`);
+    const errorText = await response.text();
+    throw new Error(`OpenAI API error (${response.status}): ${errorText}`);
   }
 
   const json = (await response.json()) as ChatCompletion;
-  const message = json.choices?.[0]?.message;
+  const choice = json.choices?.[0];
+  const message = choice?.message;
   const toolCalls: PlannedTool[] = (message?.tool_calls ?? []).map((call) => {
     let args: Record<string, unknown> = {};
     try {
@@ -101,6 +121,14 @@ export async function completeTurn(messages: ChatMessage[]): Promise<LlmTurn> {
       args,
     };
   });
+
+  // Record token usage
+  if (ctx && json.usage) {
+    recordUsage(ctx.runId, ctx.turnIndex, model, json.usage, {
+      orgId: ctx.orgId,
+      userId: ctx.userId,
+    });
+  }
 
   return {
     text: message?.content ?? "",
