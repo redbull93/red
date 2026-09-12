@@ -9,6 +9,9 @@
   },
   "dependencies": {
     "@auth0/nextjs-auth0": "^4.29.0",
+    "@copilotkit/react-core": "^1.71.1",
+    "@copilotkit/react-ui": "^1.71.1",
+    "@copilotkit/runtime": "^1.71.1",
     "@red/agent": "*",
     "@red/database": "*",
     "@red/github": "*",

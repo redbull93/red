@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
+import { useCopilotAction, useCopilotReadable } from "@copilotkit/react-core";
 import { AnimatedRays } from "@/components/ui/animated-rays";
 import { GlowBorderCard } from "@/components/ui/glow-border-card";
 import { KineticTextLoader } from "@/components/ui/kinetic-text-loader";
@@ -128,6 +129,150 @@ export function MissionControl() {
   }
 
   const pending = state.approvals.filter((a) => a.status === "pending");
+
+  // Provide CopilotKit with real-time awareness of the mission control state
+  useCopilotReadable({
+    description:
+      "Current mission control state, including active traces, pending human approvals, jobs, and receipts.",
+    value: {
+      pendingApprovals: pending,
+      traces: state.traces.slice(-5),
+      receipts: state.receipts.slice(-5),
+      jobs: state.jobs,
+      isBusy: busy,
+    },
+  });
+
+  // Copilot in-app action: trigger standup
+  useCopilotAction({
+    name: "triggerStandup",
+    description:
+      "Trigger a new standup collection event for a platform (Slack, Discord, or WhatsApp).",
+    parameters: [
+      {
+        name: "platform",
+        type: "string",
+        description: "Target platform ('slack', 'discord', or 'whatsapp')",
+        required: false,
+      },
+      {
+        name: "mode",
+        type: "string",
+        description:
+          "Run mode: 'loop' (automated), 'hitl' (human-in-the-loop), or 'fail' (error recovery test)",
+        required: false,
+      },
+    ],
+    handler: async ({
+      platform = "slack",
+      mode = "loop",
+    }: {
+      platform?: string;
+      mode?: string;
+    }) => {
+      const validPlatform =
+        platform === "discord" || platform === "whatsapp"
+          ? platform
+          : "slack";
+      const validMode = mode === "hitl" || mode === "fail" ? mode : "loop";
+      await fire(validMode, validPlatform);
+      return `Triggered ${validMode} standup on ${validPlatform}. Mission Control updated.`;
+    },
+    render: ({ status, result }) => {
+      if (status === "inProgress") {
+        return (
+          <div className="flex items-center gap-2 rounded-lg border border-purple-500/30 bg-purple-950/40 p-2.5 text-xs text-purple-200">
+            <span className="inline-block h-2 w-2 animate-ping rounded-full bg-purple-400" />
+            <span>Kicking off team stand-up collection...</span>
+          </div>
+        );
+      }
+      return (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-950/40 p-2.5 text-xs text-emerald-200">
+          <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
+          <span>{result || "Standup triggered successfully."}</span>
+        </div>
+      );
+    },
+  });
+
+  // Copilot in-app action: approve HITL gate
+  useCopilotAction({
+    name: "approvePendingAction",
+    description:
+      "Approve a pending human-in-the-loop gate or blocker resolution action.",
+    parameters: [
+      {
+        name: "approvalId",
+        type: "string",
+        description: "The ID of the approval to grant (e.g. apr_...)",
+        required: false,
+      },
+    ],
+    handler: async ({ approvalId }: { approvalId?: string }) => {
+      const targetId = approvalId || pending[0]?.id;
+      if (!targetId) {
+        return "No pending approvals found in Mission Control.";
+      }
+      await decide(targetId, "approve");
+      return `Approved gate ${targetId}. Blocker resolution proceeded.`;
+    },
+    render: ({ status, result }) => {
+      if (status === "inProgress") {
+        return (
+          <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/40 p-2.5 text-xs text-amber-200">
+            <span className="inline-block h-2 w-2 animate-ping rounded-full bg-amber-400" />
+            <span>Submitting HITL approval...</span>
+          </div>
+        );
+      }
+      return (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-950/40 p-2.5 text-xs text-emerald-200">
+          <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
+          <span>{result || "Gate approved."}</span>
+        </div>
+      );
+    },
+  });
+
+  // Copilot in-app action: stop runaway run
+  useCopilotAction({
+    name: "stopRun",
+    description:
+      "Emergency stop an active agent run or pending approval gate.",
+    parameters: [
+      {
+        name: "approvalId",
+        type: "string",
+        description: "The ID of the approval or run to abort",
+        required: false,
+      },
+    ],
+    handler: async ({ approvalId }: { approvalId?: string }) => {
+      const targetId = approvalId || pending[0]?.id;
+      if (!targetId) {
+        return "No active approval or run to stop.";
+      }
+      await decide(targetId, "stop");
+      return `Emergency stop executed for ${targetId}.`;
+    },
+    render: ({ status, result }) => {
+      if (status === "inProgress") {
+        return (
+          <div className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-950/40 p-2.5 text-xs text-rose-200">
+            <span className="inline-block h-2 w-2 animate-ping rounded-full bg-rose-400" />
+            <span>Executing emergency stop...</span>
+          </div>
+        );
+      }
+      return (
+        <div className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-950/40 p-2.5 text-xs text-rose-200">
+          <span className="inline-block h-2 w-2 rounded-full bg-rose-400" />
+          <span>{result || "Emergency stop executed."}</span>
+        </div>
+      );
+    },
+  });
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-ink">
