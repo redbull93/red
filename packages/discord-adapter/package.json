@@ -1,0 +1,20 @@
+{
+  "name": "@red/discord-adapter",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "npx tsx src/start.ts",
+    "deploy": "npx tsx src/deploy-commands.ts"
+  },
+  "dependencies": {
+    "@red/shared": "*",
+    "discord.js": "^14.16.3"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.2"
+  }
+}

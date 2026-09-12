@@ -1,0 +1,19 @@
+{
+  "name": "@red/slack-adapter",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "npx tsx src/start.ts"
+  },
+  "dependencies": {
+    "@red/shared": "*",
+    "@slack/bolt": "^4.2.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.2"
+  }
+}

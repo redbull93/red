@@ -1,4 +1,4 @@
-# StandUp Agent
+# StandUp
 
 An AI teammate that runs your daily stand-up — inside **Slack and Discord**,
 where your team already works.
