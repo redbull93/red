@@ -12,7 +12,8 @@
     "mcp": "npm run start --workspace=@red/mcp-tools",
     "loop": "npm run demo --workspace=@red/orchestrator --",
     "loop:fail": "npm run demo --workspace=@red/orchestrator -- --fail",
-    "loop:hitl": "npm run demo --workspace=@red/orchestrator -- --hitl"
+    "loop:hitl": "npm run demo --workspace=@red/orchestrator -- --hitl",
+    "test": "npm run test --workspace=@red/orchestrator"
   },
   "engines": {
     "node": ">=20"

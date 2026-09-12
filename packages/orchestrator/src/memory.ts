@@ -23,10 +23,10 @@ function blockerKey(from: string, to: string): string {
  * from free-text stand-up replies. Not LLM-based — fast and deterministic.
  */
 const BLOCKER_PATTERNS: RegExp[] = [
-  // "Can't finish X until I get Y from Brian"
-  /(\w+):\s*[^.]*(?:blocked|waiting|can'?t finish|stuck|need)[^.]*(?:from|on|by)\s+(\w+)/gi,
-  // "waiting on Brian" / "blocked by Brian"
-  /(\w+):\s*[^.]*(?:waiting on|blocked by|depends on|need(?:s)? from)\s+(\w+)/gi,
+  // "Can't finish X until I get Y from Brian" / "Waiting for Bob"
+  /(\w+):\s*[^.\n]*(?:blocked|waiting|can'?t finish|stuck|need|depends)[^.\n]*(?:from|on|by|for)\s+(\w+)/gi,
+  // "waiting on Brian" / "waiting for Brian" / "blocked by Brian"
+  /(\w+):\s*[^.\n]*(?:waiting on|waiting for|blocked by|blocked on|depends on|need(?:s)? from)\s+(\w+)/gi,
 ];
 
 type ExtractedBlocker = {
