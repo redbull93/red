@@ -19,9 +19,9 @@ const display = Syne({
 });
 
 export const metadata: Metadata = {
-  title: "StandUp Agent — mission control",
+  title: "StandUp — mission control",
   description:
-    "Vengeance UI control plane for StandUp Agent. The agent lives in Slack/Discord, not here.",
+    "Vengeance UI control plane for StandUp. The agent lives in Slack/Discord, not here.",
 };
 
 export default function RootLayout({

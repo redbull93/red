@@ -1,17 +1,17 @@
 {
-  "name": "@red/orchestrator",
+  "name": "@red/discord-adapter",
   "version": "0.1.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
-    "demo": "npx tsx src/demo.ts"
+    "start": "npx tsx src/start.ts",
+    "deploy": "npx tsx src/deploy-commands.ts"
   },
   "dependencies": {
-    "@red/mcp-tools": "*",
     "@red/shared": "*",
-    "@red/ai": "*"
+    "discord.js": "^14.16.3"
   },
   "devDependencies": {
     "tsx": "^4.20.0",

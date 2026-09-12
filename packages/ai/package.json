@@ -1,17 +1,17 @@
 {
-  "name": "@red/orchestrator",
+  "name": "@red/ai",
   "version": "0.1.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
-    "demo": "npx tsx src/demo.ts"
+    "smoke": "npx tsx src/smoke.ts"
   },
   "dependencies": {
-    "@red/mcp-tools": "*",
     "@red/shared": "*",
-    "@red/ai": "*"
+    "openai": "^4.104.0",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "tsx": "^4.20.0",

@@ -1,17 +1,16 @@
 {
-  "name": "@red/orchestrator",
+  "name": "@red/slack-adapter",
   "version": "0.1.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
-    "demo": "npx tsx src/demo.ts"
+    "start": "npx tsx src/start.ts"
   },
   "dependencies": {
-    "@red/mcp-tools": "*",
     "@red/shared": "*",
-    "@red/ai": "*"
+    "@slack/bolt": "^4.2.0"
   },
   "devDependencies": {
     "tsx": "^4.20.0",

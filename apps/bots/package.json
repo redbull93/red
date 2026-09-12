@@ -1,17 +1,17 @@
 {
-  "name": "@red/orchestrator",
+  "name": "@red/bots",
   "version": "0.1.0",
+  "private": true,
   "type": "module",
-  "exports": {
-    ".": "./src/index.ts"
-  },
   "scripts": {
-    "demo": "npx tsx src/demo.ts"
+    "start": "npx tsx src/index.ts"
   },
   "dependencies": {
-    "@red/mcp-tools": "*",
+    "@red/ai": "*",
+    "@red/discord-adapter": "*",
+    "@red/orchestrator": "*",
     "@red/shared": "*",
-    "@red/ai": "*"
+    "@red/slack-adapter": "*"
   },
   "devDependencies": {
     "tsx": "^4.20.0",
