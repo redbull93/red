@@ -23,7 +23,7 @@ const server = new McpServer({
   version: "0.1.0",
 });
 
-function schemaFor(specName: string) {
+function schemaFor(specName: string): z.ZodRawShape {
   if (specName === "environment.read") {
     return { channelId: z.string() };
   }

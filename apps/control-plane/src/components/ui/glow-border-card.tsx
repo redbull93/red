@@ -7,6 +7,10 @@ export interface GlowBorderCardProps extends React.HTMLAttributes<HTMLDivElement
   children?: React.ReactNode;
   colorPreset?: "nature" | "ocean" | "sunset" | "aurora" | "custom";
   paused?: boolean;
+  width?: string;
+  inset?: string;
+  borderWidth?: string;
+  blurAmount?: string;
 }
 
 const colorPresets: Record<string, string[]> = {
@@ -28,6 +32,10 @@ export const GlowBorderCard = React.forwardRef<
       className,
       colorPreset = "aurora",
       paused = false,
+      width,
+      inset,
+      borderWidth,
+      blurAmount,
       style,
       ...props
     },
@@ -39,6 +47,15 @@ export const GlowBorderCard = React.forwardRef<
       colorVars[`--glow-color-${i + 1}`] = color;
     });
 
+    const combinedStyle: React.CSSProperties = {
+      ...colorVars,
+      ...(width ? { width } : {}),
+      ...(inset ? { "--glow-inset": inset } : {}),
+      ...(borderWidth ? { "--glow-border-width": borderWidth } : {}),
+      ...(blurAmount ? { "--glow-blur": blurAmount } : {}),
+      ...style,
+    };
+
     return (
       <div
         ref={ref}
@@ -46,7 +63,7 @@ export const GlowBorderCard = React.forwardRef<
           "relative isolate overflow-hidden rounded-2xl p-px",
           className,
         )}
-        style={{ ...colorVars, ...style } as React.CSSProperties}
+        style={combinedStyle}
         {...props}
       >
         <div
