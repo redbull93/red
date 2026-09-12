@@ -23,6 +23,7 @@
     "loop:agent": "npx tsx scripts/loop.ts",
     "test:e2e": "npx tsx scripts/e2e-test.ts",
     "preflight": "npx tsx scripts/preflight.ts",
+    "ambiguous:probe": "npx tsx scripts/ambiguous-probe.ts",
     "trigger:dev": "npx trigger.dev@4.5.16 dev",
     "trigger:deploy": "npx trigger.dev@4.5.16 deploy",
     "council:capture": "npx tsx scripts/capture-council.ts",

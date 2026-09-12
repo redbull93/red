@@ -86,14 +86,26 @@ Two login modes, and the difference matters. `ambiguous auth login` with
 no arguments opens a browser and logs in **as you**. `--token` is the
 agent/CI path, which is what we want.
 
-## 6. Send me your workspace's real API shape
+## 6. Confirm the real API shape
 
-The CLI is a dynamic shell: it fetches your workspace's OpenAPI spec at
-startup and builds its command tree from it. So `--help` is the only
-trustworthy source for route and field names — not the marketing page,
-not this document.
+The five workspace tools were written against **assumed** REST routes.
+The CLI is a dynamic shell — it fetches your workspace's OpenAPI spec at
+startup and builds its command tree from it — so the only trustworthy
+source for route and field names is your workspace, not this document.
 
-Run these and paste the output:
+As soon as the key is in `.env.local`:
+
+```bash
+npm run ambiguous:probe
+```
+
+That confirms the key belongs to the **agent** and not to you, then
+checks every assumed route against your live spec and prints what
+actually exists for chat, search, calendar, tasks, docs and webhooks. It
+issues GETs only — it does not post or create anything.
+
+If no OpenAPI document is exposed, fall back to the CLI and paste the
+output:
 
 ```bash
 npx ambiguous chat --help
