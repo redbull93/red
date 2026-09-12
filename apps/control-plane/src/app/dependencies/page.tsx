@@ -6,6 +6,7 @@ import type { DependencyRecord, DependencyStatus } from "@red/shared";
 export default function DependenciesPage() {
   const [dependencies, setDependencies] = useState<DependencyRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<"all" | "active" | "resolved">("all");
 
   async function loadDependencies() {
     setLoading(true);
@@ -35,66 +36,97 @@ export default function DependenciesPage() {
     }
   }
 
+  const filtered = dependencies.filter((dep) => {
+    if (filter === "active") return dep.status !== "resolved";
+    if (filter === "resolved") return dep.status === "resolved";
+    return true;
+  });
+
+  const activeCount = dependencies.filter((d) => d.status !== "resolved").length;
+  const resolvedCount = dependencies.filter((d) => d.status === "resolved").length;
+
   return (
     <div className="mx-auto max-w-7xl px-6 py-8">
-      <div className="border-b border-white/10 pb-5">
-        <h1 className="font-display text-2xl font-bold tracking-tight text-white">
-          Cross-Referenced Blockers & Dependency Graph
-        </h1>
-        <p className="mt-1 font-mono text-xs text-zinc-400">
-          Implicit & explicit dependencies detected across teammate standups
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
+        <div>
+          <h1 className="font-display text-2xl font-bold tracking-tight text-white">
+            Cross-Referenced Blockers & Dependency Graph
+          </h1>
+          <p className="mt-1 font-mono text-xs text-zinc-400">
+            Implicit & explicit coordination gaps deduced across team standups
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 font-mono text-xs">
+          <button
+            onClick={() => setFilter("all")}
+            className={`rounded-md px-3 py-1.5 transition ${
+              filter === "all"
+                ? "bg-white/10 text-white font-bold"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            All ({dependencies.length})
+          </button>
+          <button
+            onClick={() => setFilter("active")}
+            className={`rounded-md px-3 py-1.5 transition ${
+              filter === "active"
+                ? "bg-rose-500/20 text-rose-300 font-bold border border-rose-500/30"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            Active ({activeCount})
+          </button>
+          <button
+            onClick={() => setFilter("resolved")}
+            className={`rounded-md px-3 py-1.5 transition ${
+              filter === "resolved"
+                ? "bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            Resolved ({resolvedCount})
+          </button>
+          <button
+            onClick={loadDependencies}
+            className="ml-2 rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-zinc-400 hover:text-white"
+          >
+            ↻
+          </button>
+        </div>
       </div>
 
       <div className="mt-6">
         {loading ? (
-          <div className="py-12 text-center font-mono text-xs text-zinc-500">
+          <div className="py-16 text-center font-mono text-xs text-zinc-500">
             Querying dependency graph from Supabase...
           </div>
-        ) : dependencies.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="rounded-xl border border-white/10 bg-white/[0.02] p-12 text-center">
-            <p className="font-display text-lg text-zinc-300">No blockers detected</p>
+            <p className="font-display text-lg text-zinc-300">No blockers matching this filter</p>
             <p className="mt-1 font-mono text-xs text-zinc-500">
               When teammates report dependencies in DMs, the Reasoning Engine maps them here.
             </p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.02]">
-            <table className="w-full text-left font-mono text-xs">
-              <thead className="border-b border-white/10 bg-white/[0.03] text-zinc-400 uppercase text-[10px]">
-                <tr>
-                  <th className="px-5 py-3.5">Type</th>
-                  <th className="px-5 py-3.5">Subject</th>
-                  <th className="px-5 py-3.5">Blocked Person</th>
-                  <th className="px-5 py-3.5">Responsible</th>
-                  <th className="px-5 py-3.5">Confidence</th>
-                  <th className="px-5 py-3.5">Status</th>
-                  <th className="px-5 py-3.5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {dependencies.map((dep) => (
-                  <tr key={dep.id} className="hover:bg-white/[0.01] transition-colors">
-                    <td className="px-5 py-4">
-                      <span className="rounded bg-white/10 px-2 py-0.5 font-bold uppercase text-[10px] text-zinc-300">
+          <div className="grid gap-4">
+            {filtered.map((dep) => {
+              const confidencePercent = Math.round(dep.confidence * 100);
+
+              return (
+                <div
+                  key={dep.id}
+                  className="rounded-xl border border-white/10 bg-white/[0.02] p-5 transition hover:border-white/20"
+                >
+                  {/* Visual Dependency Flow */}
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="rounded bg-white/10 px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-zinc-300">
                         {dep.type}
                       </span>
-                    </td>
-                    <td className="px-5 py-4 font-semibold text-white max-w-xs truncate">
-                      {dep.subject}
-                    </td>
-                    <td className="px-5 py-4 text-zinc-300">
-                      @{dep.blockedName || dep.blockedUserId || "unknown"}
-                    </td>
-                    <td className="px-5 py-4 text-ember">
-                      @{dep.blockerName || dep.blockerUserId || "unassigned"}
-                    </td>
-                    <td className="px-5 py-4 text-zinc-400">
-                      {Math.round(dep.confidence * 100)}%
-                    </td>
-                    <td className="px-5 py-4">
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase border ${
+                        className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase border ${
                           dep.status === "resolved"
                             ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
                             : dep.status === "waiting_hitl"
@@ -104,23 +136,73 @@ export default function DependenciesPage() {
                       >
                         {dep.status}
                       </span>
-                    </td>
-                    <td className="px-5 py-4 text-right">
+                      <span className="font-mono text-[11px] text-zinc-500">
+                        Confidence: {confidencePercent}%
+                      </span>
+                    </div>
+
+                    <div>
                       {dep.status !== "resolved" ? (
                         <button
                           onClick={() => updateStatus(dep.id, "resolved")}
-                          className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/20 transition-colors"
+                          className="rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 font-mono text-xs text-emerald-300 hover:bg-emerald-500/20 transition-colors"
                         >
-                          Mark Resolved
+                          ✓ Mark Resolved
                         </button>
                       ) : (
-                        <span className="text-[11px] text-zinc-500">Resolved</span>
+                        <span className="font-mono text-xs text-zinc-500">
+                          Resolved {dep.resolvedAt ? new Date(dep.resolvedAt).toLocaleTimeString() : ""}
+                        </span>
                       )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+
+                  {/* Flow visualization */}
+                  <div className="mt-4 flex flex-col md:flex-row md:items-center gap-3 rounded-lg border border-white/5 bg-black/40 p-4 font-mono text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-rose-500/20 px-2.5 py-1 text-rose-300 font-bold border border-rose-500/30">
+                        @{dep.blockedName || dep.blockedUserId || "Blocked Person"}
+                      </span>
+                      <span className="text-zinc-500">is waiting for</span>
+                    </div>
+
+                    <div className="flex-1 rounded border border-white/10 bg-white/5 px-3 py-1 text-white font-semibold text-center">
+                      &ldquo;{dep.subject}&rdquo;
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-zinc-500">from</span>
+                      <span className="rounded-full bg-ember/20 px-2.5 py-1 text-ember font-bold border border-ember/30">
+                        @{dep.blockerName || dep.blockerUserId || "Responsible Person"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Evidence Pills */}
+                  {dep.evidence && dep.evidence.length > 0 && (
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-[10px] text-zinc-500 uppercase">
+                        Evidence:
+                      </span>
+                      {dep.evidence.map((ev, i) => (
+                        <span
+                          key={i}
+                          className="rounded border border-white/10 bg-white/[0.02] px-2 py-0.5 font-mono text-[11px] text-zinc-400"
+                        >
+                          {ev}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="mt-3 flex items-center gap-6 font-mono text-[11px] text-zinc-500">
+                    <span>Dependency ID: {dep.id}</span>
+                    <span>Standup: {dep.standupId}</span>
+                    <span>Created: {dep.createdAt ? new Date(dep.createdAt).toLocaleTimeString() : "—"}</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
