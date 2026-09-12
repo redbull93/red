@@ -5,6 +5,28 @@ export { hasModelKey } from "./llm";
 export { enqueueJob, setJobStatus } from "./jobs";
 export { emitAgUi, onAgUi, runToAgUiState } from "./ag-ui";
 export type { AgUiEvent, AgUiEmitter } from "./ag-ui";
+export {
+  councilEnabled,
+  councilSeats,
+  needsHuman,
+  runCouncil,
+  summarizeVerdict,
+} from "./council";
+export {
+  callModel,
+  describeFailure,
+  fromWireToolName,
+  hasRouterKey,
+  modelForSeat,
+  normalizeBase,
+  routerConfig,
+  SEAT_IDS,
+  SEAT_LABELS,
+  toWireToolName,
+} from "./router";
+export type { SeatId, RouterFailure, RouterResult } from "./router";
+export { listVerdicts, loadVerdict, saveVerdict } from "./verdict-cache";
+export { loadRuntimeEnv } from "./runtime-env";
 export * from "./agent-loop";
 // ── New modules ───────────────────────────────────────────────────
 export {

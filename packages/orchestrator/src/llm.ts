@@ -1,11 +1,26 @@
 import { openaiToolDefinitions } from "@red/mcp-tools";
 import { recordUsage, recordStubUsage } from "./usage";
+import { loadRuntimeEnv } from "./runtime-env";
+import {
+  callModel,
+  describeFailure,
+  hasRouterKey,
+  modelForSeat,
+  type SeatId,
+} from "./router";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
   tool_call_id?: string;
   name?: string;
+  /**
+   * Set on an assistant message when tool results follow it. Strict providers
+   * reject a `tool` message that does not answer a preceding `tool_calls`.
+   */
+  toolCalls?: PlannedTool[];
+  /** DeepSeek thinking mode requires its own reasoning back on the next turn. */
+  reasoning?: string;
 };
 
 export type PlannedTool = {
@@ -18,6 +33,10 @@ export type LlmTurn = {
   text: string;
   toolCalls: PlannedTool[];
   stub: boolean;
+  /** Which model actually drove this turn, for the trace. */
+  model?: string;
+  /** DeepSeek v4 exposes its chain of thought; useful trace material. */
+  reasoning?: string;
 };
 
 export type TurnContext = {
@@ -45,18 +64,39 @@ type ChatCompletion = {
 };
 
 export function hasModelKey() {
+  loadRuntimeEnv();
   return Boolean(
-    process.env.OPENAI_API_KEY ||
+    process.env.AGENT_ROUTER_API_KEY ||
+      process.env.OPENAI_API_KEY ||
       process.env.OPENROUTER_API_KEY ||
       process.env.AI_GATEWAY_API_KEY ||
       process.env.MODEL_API_KEY,
   );
 }
 
+/**
+ * The seat that drives the tool loop. Defaults to DeepSeek because it is the one
+ * seat outside Agent Router's daily rationing, so the loop keeps working when GPT
+ * and Opus return 402. Override with ROUTER_DRIVER_SEAT.
+ */
+function driverSeat(): SeatId {
+  loadRuntimeEnv();
+  const raw = (process.env.ROUTER_DRIVER_SEAT || "deepseek").toLowerCase();
+  return raw === "gpt" || raw === "opus" ? raw : "deepseek";
+}
+
 export async function completeTurn(
   messages: ChatMessage[],
   ctx?: TurnContext,
 ): Promise<LlmTurn> {
+  loadRuntimeEnv();
+
+  // Agent Router is the primary gateway. It wins over a direct OpenAI key
+  // because it is where the three council models live.
+  if (hasRouterKey()) {
+    return routerTurn(messages, ctx);
+  }
+
   let model = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
   const apiKey =
     process.env.OPENAI_API_KEY ??
@@ -137,9 +177,66 @@ export async function completeTurn(
   };
 }
 
+/**
+ * Drives one tool-calling turn through Agent Router.
+ *
+ * When the gateway refuses — most often a 402 because the model's daily batch is
+ * drained — we fall back to the stub rather than throwing, so the loop stays
+ * demonstrable. The reason is prefixed onto the text so nobody mistakes a stub
+ * for a live model.
+ */
+async function routerTurn(
+  messages: ChatMessage[],
+  ctx?: TurnContext,
+): Promise<LlmTurn> {
+  const seat = driverSeat();
+  const model = modelForSeat(seat);
+
+  const result = await callModel({
+    model,
+    messages,
+    tools: openaiToolDefinitions(),
+  });
+
+  if (!result.ok) {
+    if (ctx) {
+      recordStubUsage(ctx.runId, ctx.turnIndex, {
+        orgId: ctx.orgId,
+        userId: ctx.userId,
+      });
+    }
+    const stub = stubTurn(messages);
+    return {
+      ...stub,
+      text: `[${model} unavailable: ${describeFailure(result.failure)}]\n${stub.text}`,
+    };
+  }
+
+  if (ctx && result.usage) {
+    recordUsage(ctx.runId, ctx.turnIndex, result.model, result.usage, {
+      orgId: ctx.orgId,
+      userId: ctx.userId,
+    });
+  }
+
+  return {
+    text: result.text,
+    toolCalls: result.toolCalls,
+    stub: false,
+    model: result.model,
+    reasoning: result.reasoning,
+  };
+}
+
 function stubTurn(messages: ChatMessage[]): LlmTurn {
-  const lastUser = [...messages].reverse().find((m) => m.role === "user");
-  const body = lastUser?.content ?? "";
+  // Scan every user message rather than only the last one: the loop now appends a
+  // council block after the environment block, so the channel id and the
+  // force_fail / require_hitl flags are no longer guaranteed to be in the final
+  // message.
+  const body = messages
+    .filter((m) => m.role === "user")
+    .map((m) => m.content)
+    .join("\n");
   const forceFail = /(?:^|\n)\s*force_fail:\s*true/.test(body);
   const requireHitl = /(?:^|\n)\s*require_hitl:\s*true/.test(body);
   const channel =
