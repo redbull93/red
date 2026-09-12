@@ -16,7 +16,7 @@ export interface AgentLoopDeps {
     platform: Platform,
     channelId: string,
     text: string,
-  ) => Promise<void>;
+  ) => Promise<unknown>;
   requestApproval?: (
     platform: Platform,
     channelId: string,

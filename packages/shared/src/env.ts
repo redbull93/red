@@ -18,7 +18,14 @@ export const EnvSchema = z.object({
   EXA_API_KEY: z.string().optional(),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_ANON_KEY: z.string().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   TRIGGER_SECRET_KEY: z.string().optional(),
+
+  GITHUB_TOKEN: z.string().optional(),
+  GITHUB_REPO: z.string().optional(),
+
+  PORT: z.string().default("3001"),
+  CONTROL_PLANE_URL: z.string().default("http://localhost:3000"),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

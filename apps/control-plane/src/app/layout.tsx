@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Syne } from "next/font/google";
+import { NavHeader } from "@/components/nav-header";
 import "./globals.css";
 
 const geist = Geist({
@@ -32,9 +33,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={`${geist.variable} ${mono.variable} ${display.variable} min-h-screen bg-ink font-sans antialiased`}
+        className={`${geist.variable} ${mono.variable} ${display.variable} min-h-screen bg-ink font-sans antialiased text-zinc-100 flex flex-col`}
       >
-        {children}
+        <NavHeader />
+        <main className="flex-1">{children}</main>
       </body>
     </html>
   );

@@ -17,7 +17,9 @@
     "slack": "npm run start --workspace=@red/slack-adapter",
     "discord": "npm run start --workspace=@red/discord-adapter",
     "discord:deploy": "npm run deploy --workspace=@red/discord-adapter",
-    "bots": "npm run start --workspace=@red/bots"
+    "bots": "npm run start --workspace=@red/bots",
+    "seed": "npx tsx scripts/seed.ts",
+    "loop:agent": "npx tsx scripts/loop.ts"
   },
   "engines": {
     "node": ">=20"

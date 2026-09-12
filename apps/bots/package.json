@@ -4,11 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "npx tsx src/index.ts"
+    "start": "npx tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@red/agent": "*",
     "@red/ai": "*",
+    "@red/database": "*",
     "@red/discord-adapter": "*",
+    "@red/github": "*",
     "@red/orchestrator": "*",
     "@red/shared": "*",
     "@red/slack-adapter": "*"
