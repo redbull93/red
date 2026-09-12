@@ -6,16 +6,18 @@ import {
 import { renderEnvironmentBlock, toAgentContext } from "./context";
 import { uid } from "./ids";
 import { cancelRunJobs, enqueueJob, setJobStatus } from "./jobs";
-import { completeTurn, type ChatMessage } from "./llm";
+import { completeTurn, type ChatMessage, type TurnContext } from "./llm";
 import { SYSTEM_PROMPT, TOOL_PREAMBLE } from "./prompts";
 import { emitAgUi } from "./ag-ui";
 import { getStore } from "./store";
 import { trace } from "./traces";
-import type { Approval, EnvironmentEvent, Run } from "./types";
+import { recordBlockers, renderMemoryContext } from "./memory";
+import { validateAction, validateApproverPermission } from "./guardrails";
+import type { Approval, ApproverIdentity, EnvironmentEvent, Run } from "./types";
 
 const places = new Map<string, PlaceSnapshot>();
 
-function toolContext(runId: string) {
+function toolContext(runId: string, orgId?: string, approver?: ApproverIdentity) {
   return {
     now: () => new Date(),
     readPlace: (channelId: string) => places.get(channelId) ?? null,
@@ -35,6 +37,8 @@ function toolContext(runId: string) {
         channelId: input.channelId,
         body: input.body,
         at: written.landedAt,
+        approvedBy: approver,
+        orgId,
       });
       return written;
     },
@@ -74,7 +78,7 @@ export async function ingestEnvironmentEvent(
     "signal",
     `Signal in ${event.environmentName}`,
     event.signalBody,
-    { kind: event.environmentKind, channelId: event.channelId },
+    { kind: event.environmentKind, channelId: event.channelId, orgId: event.orgId },
   );
   trace(
     run.id,
@@ -87,12 +91,31 @@ export async function ingestEnvironmentEvent(
   setJobStatus(job.id, "running");
   trace(run.id, "job", "Job running", job.title, { jobId: job.id });
 
+  // ── Cross-run memory: record blockers and inject prior context ──
+  const blockers = recordBlockers(
+    run.id,
+    event.channelId,
+    event.actors,
+    event.signalBody,
+    event.orgId,
+  );
+  if (blockers.length > 0) {
+    trace(run.id, "context", "Blockers detected", `${blockers.length} blocker(s) recorded`, {
+      blockers: blockers.map((b) => ({ from: b.from, to: b.to, streak: b.streak })),
+    });
+  }
+
+  const memoryBlock = renderMemoryContext(event.channelId, event.orgId);
+  const systemContent = memoryBlock
+    ? `${SYSTEM_PROMPT}\n\n${TOOL_PREAMBLE}\n\n${memoryBlock}`
+    : `${SYSTEM_PROMPT}\n\n${TOOL_PREAMBLE}`;
+
   const messages: ChatMessage[] = [
-    { role: "system", content: `${SYSTEM_PROMPT}\n\n${TOOL_PREAMBLE}` },
+    { role: "system", content: systemContent },
     { role: "user", content: renderEnvironmentBlock(event) },
   ];
 
-  const ctx = toolContext(run.id);
+  const ctx = toolContext(run.id, event.orgId, event.authenticatedUser);
   const mayAct = event.actors.some((a) => a.mayAct);
   if (event.requireHitl || !mayAct) {
     const approval: Approval = {
@@ -105,15 +128,18 @@ export async function ingestEnvironmentEvent(
       proposedAction: "world.act",
       preview: event.signalBody.slice(0, 180),
       risk: event.urgency === "high" ? "high" : "medium",
+      requiredRole: event.urgency === "high" ? "tech-lead" : undefined,
       principal: event.principal ?? event.actors[0]?.id ?? "human",
       status: "pending",
       expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      orgId: event.orgId,
     };
     store.approvals.push(approval);
     run.status = "awaiting_hitl";
     setJobStatus(job.id, "queued");
     trace(run.id, "hitl", "Paused for approval", approval.reason, {
       approvalId: approval.id,
+      requiredRole: approval.requiredRole,
     });
     emitAgUi({
       type: "HitlRequired",
@@ -125,7 +151,14 @@ export async function ingestEnvironmentEvent(
 
   try {
     for (let step = 0; step < 6; step += 1) {
-      const turn = await completeTurn(messages);
+      // ── Usage tracking context ──
+      const turnCtx: TurnContext = {
+        runId: run.id,
+        turnIndex: step,
+        orgId: event.orgId,
+        userId: event.authenticatedUser?.userId,
+      };
+      const turn = await completeTurn(messages, turnCtx);
       if (turn.text) {
         run.assistantText = turn.text;
         trace(run.id, "plan", turn.stub ? "Stub plan" : "Model plan", turn.text);
@@ -144,13 +177,22 @@ export async function ingestEnvironmentEvent(
         content: turn.text || "",
       });
 
-      for (const call of turn.toolCalls) {
-        if (call.name === "world.act" && event.requireHitl) {
-          run.status = "awaiting_hitl";
-          return run;
-        }
+      // ── Parallel tool dispatch ──
+      // Separate tools into serial (world.act — needs guardrails + HITL gate)
+      // and parallel (everything else can run concurrently).
+      const serialCalls = turn.toolCalls.filter((c) => c.name === "world.act");
+      const parallelCalls = turn.toolCalls.filter((c) => c.name !== "world.act");
 
-        const result = await dispatchTool(call.name, call.args, ctx);
+      // Dispatch independent tools concurrently
+      const parallelResults = await Promise.all(
+        parallelCalls.map(async (call) => {
+          const result = await dispatchTool(call.name, call.args, ctx);
+          return { call, result };
+        }),
+      );
+
+      // Process parallel results
+      for (const { call, result } of parallelResults) {
         if (result.receiptId) {
           trace(run.id, "receipt", "Receipt", result.receiptId, result.data);
         }
@@ -180,6 +222,63 @@ export async function ingestEnvironmentEvent(
           content: JSON.stringify(result),
         });
       }
+
+      // Dispatch serial tools (world.act) with guardrails
+      for (const call of serialCalls) {
+        if (event.requireHitl) {
+          run.status = "awaiting_hitl";
+          return run;
+        }
+
+        // ── Guardrail validation ──
+        const guardrailResult = validateAction(call, event);
+        trace(run.id, "tool", "Guardrail check", guardrailResult.pass ? "passed" : "blocked", {
+          violations: guardrailResult.violations,
+        });
+
+        if (!guardrailResult.pass) {
+          // Guardrail blocked the action — treat as a soft failure
+          const blockReasons = guardrailResult.violations
+            .filter((v) => v.severity === "block")
+            .map((v) => v.detail)
+            .join("; ");
+
+          trace(run.id, "error", "Guardrail blocked", blockReasons);
+
+          messages.push({
+            role: "tool",
+            name: call.name,
+            tool_call_id: call.id,
+            content: JSON.stringify({
+              ok: false,
+              tool: call.name,
+              data: {},
+              error: `Guardrail blocked: ${blockReasons}`,
+            }),
+          });
+          continue;
+        }
+
+        const result = await dispatchTool(call.name, call.args, ctx);
+        if (result.receiptId) {
+          trace(run.id, "receipt", "Receipt", result.receiptId, result.data);
+        }
+
+        trace(
+          run.id,
+          result.ok ? "tool" : "error",
+          call.name,
+          result.ok ? "ok" : (result.error ?? "failed"),
+          result.data,
+        );
+
+        messages.push({
+          role: "tool",
+          name: call.name,
+          tool_call_id: call.id,
+          content: JSON.stringify(result),
+        });
+      }
     }
 
     run.status = "completed";
@@ -200,40 +299,78 @@ export async function ingestEnvironmentEvent(
 
 export async function resolveApproval(
   approvalId: string,
-  decision: "approved" | "stopped",
+  decision: "approved" | "approve" | "stopped" | "stop",
+  approver?: ApproverIdentity,
 ): Promise<Run | undefined> {
   const store = getStore();
   const approval = store.approvals.find((a) => a.id === approvalId);
   if (!approval || approval.status !== "pending") return undefined;
-  approval.status = decision;
+
+  // RBAC permission check
+  const rbacCheck = validateApproverPermission(approval.requiredRole, approver);
+  if (!rbacCheck.pass) {
+    trace(
+      approval.runId,
+      "error",
+      "Approval unauthorized",
+      rbacCheck.violations.map((v) => v.detail).join("; "),
+      { requiredRole: approval.requiredRole, approver },
+    );
+    throw new Error(
+      `Permission Denied: ${rbacCheck.violations.map((v) => v.detail).join("; ")}`,
+    );
+  }
+  
+  const isStop = decision === "stopped" || decision === "stop";
+  approval.status = isStop ? "stopped" : "approved";
+  approval.resolvedBy = approver;
+  approval.resolvedAt = new Date().toISOString();
+
   const run = store.runs.find((r) => r.id === approval.runId);
   if (!run) return undefined;
 
-  if (decision === "stopped") {
+  const approverLabel =
+    approver?.name ?? approver?.email ?? approver?.userId ?? "human";
+
+  if (isStop) {
     run.status = "stopped";
     run.finishedAt = new Date().toISOString();
     cancelRunJobs(run.id);
-    const ctx = toolContext(run.id);
+    const ctx = toolContext(run.id, run.event.orgId, approver);
     await dispatchTool(
       "environment.receipt",
       {
         channelId: run.event.channelId,
-        body: "Stopped. Nothing else will run.",
+        body: `Stopped by ${approverLabel}. Nothing else will run.`,
       },
       ctx,
     );
-    trace(run.id, "hitl", "Stopped by human", "The human kept control.");
+    trace(
+      run.id,
+      "hitl",
+      "Stopped by human",
+      `Stopped by ${approverLabel}. The human kept control.`,
+      { approver },
+    );
     emitAgUi({ type: "RunFinished", run });
     return run;
   }
 
   run.event.requireHitl = false;
+  run.event.authenticatedUser = approver;
   run.status = "running";
-  trace(run.id, "hitl", "Approved", "Running the proposed act.");
+  trace(
+    run.id,
+    "hitl",
+    "Approved by human",
+    `Approved by ${approverLabel}. Running the proposed act.`,
+    { approver },
+  );
   return ingestEnvironmentEvent({
     ...run.event,
     id: uid("evt"),
     requireHitl: false,
+    authenticatedUser: approver,
   });
 }
 

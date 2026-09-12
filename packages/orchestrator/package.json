@@ -6,7 +6,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "demo": "npx tsx src/demo.ts"
+    "demo": "npx tsx src/demo.ts",
+    "test": "npx tsx src/test-suite.ts"
   },
   "dependencies": {
     "@red/mcp-tools": "*",
