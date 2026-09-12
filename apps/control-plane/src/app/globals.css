@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --stripe-color: rgba(0, 0, 0, 0.55);
+  --glow-angle: 0deg;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: #07070a;
+  color: #f4f4f5;
+}
+
+@property --glow-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.glow-conic {
+  background: conic-gradient(
+    from var(--glow-angle),
+    var(--glow-color-1),
+    var(--glow-color-2),
+    var(--glow-color-3),
+    var(--glow-color-4),
+    var(--glow-color-5),
+    var(--glow-color-6),
+    var(--glow-color-7),
+    var(--glow-color-8),
+    var(--glow-color-9),
+    var(--glow-color-10),
+    var(--glow-color-1)
+  );
+  animation: glow-spin var(--glow-animation-duration, 4s) linear infinite;
+}
+
+@keyframes glow-spin {
+  to {
+    --glow-angle: 360deg;
+  }
+}
+
+@keyframes kinetic-stretch {
+  0%,
+  100% {
+    transform: scaleY(0.45);
+  }
+  40% {
+    transform: scaleY(1.15);
+  }
+  70% {
+    transform: scaleY(0.85);
+  }
+}
+
+.kinetic-letter {
+  animation: kinetic-stretch 1.6s ease-in-out infinite;
+}
+
+.glass {
+  background: linear-gradient(
+    180deg,
+    rgba(18, 18, 24, 0.72),
+    rgba(7, 7, 10, 0.88)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 99px;
+}

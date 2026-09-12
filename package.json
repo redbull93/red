@@ -1,0 +1,20 @@
+{
+  "name": "red",
+  "private": true,
+  "description": "StandUp Agent — Slack/Discord daily stand-up that cross-references blockers.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=control-plane",
+    "build": "npm run build --workspace=control-plane",
+    "mcp": "npm run start --workspace=@red/mcp-tools",
+    "loop": "npm run demo --workspace=@red/orchestrator --",
+    "loop:fail": "npm run demo --workspace=@red/orchestrator -- --fail",
+    "loop:hitl": "npm run demo --workspace=@red/orchestrator -- --hitl"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
