@@ -24,8 +24,24 @@ export async function buildBriefing(options: {
   lines: ChannelLine[];
   memberIds: string[];
 }): Promise<Briefing> {
+  if (options.lines.length === 0) {
+    return {
+      body: [
+        "*Project manager briefing*",
+        "",
+        "*Summary*",
+        "No updates yet in this channel. Nothing to pull from another room.",
+        "",
+        "*Action items*",
+        "None yet. Post what you finished, what you’re working on, and what’s blocked.",
+      ].join("\n"),
+      followUps: [],
+    };
+  }
+
+  const memberIds = [...new Set(options.memberIds)];
   const people = collectPeople(options.lines);
-  const silent = options.memberIds.filter((id) => !people.has(id));
+  const silent = memberIds.filter((id) => !people.has(id));
   const extracted = extractActions(people, silent);
   const closers = new Map(
     [...people.entries()].map(([id, p]) => [id, p.latest] as const),

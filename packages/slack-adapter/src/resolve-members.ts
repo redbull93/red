@@ -41,6 +41,26 @@ async function channelMemberIds(
   return ids;
 }
 
+/** Humans currently in this channel. Never uses SLACK_TEAM_USER_IDS. */
+export async function resolveChannelHumans(
+  client: WebClient,
+  options: { channelId: string; botUserId?: string },
+): Promise<string[]> {
+  try {
+    const raw = await channelMemberIds(client, options.channelId);
+    const seen = new Set<string>();
+    const humans: string[] = [];
+    for (const id of raw) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      if (await isHuman(client, id, options.botUserId)) humans.push(id);
+    }
+    return humans;
+  } catch {
+    return [];
+  }
+}
+
 /** Prefer .env list, else humans in the channel, else the person who ran /standup. */
 export async function resolveStandupUserIds(
   client: WebClient,

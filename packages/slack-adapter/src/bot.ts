@@ -18,7 +18,7 @@ import { startControlServer } from "./http.ts";
 import { fileInstallStore, seedDefaultInstall } from "./install-store.ts";
 import { readChannelTranscript } from "./channel-history.ts";
 import { buildBriefing, formatFollowUps } from "./briefing.ts";
-import { resolveStandupUserIds } from "./resolve-members.ts";
+import { resolveChannelHumans } from "./resolve-members.ts";
 import { sessionToEvent } from "./to-event.ts";
 
 function requireEnv(name: string): string {
@@ -194,15 +194,13 @@ async function postChannelStatus(
     );
   }
 
-  const { ids: memberIds } = await resolveStandupUserIds(client, {
-    channelId,
-    invokerUserId: botUserId ?? "USLACKBOT",
-    botUserId,
-  });
+  const memberIds = (
+    await resolveChannelHumans(client, { channelId, botUserId })
+  ).filter((id) => id !== botUserId);
   const briefing = await buildBriefing({
     channelId,
     lines,
-    memberIds: memberIds.filter((id) => id !== botUserId),
+    memberIds,
   });
   await client.chat.postMessage({
     channel: channelId,
