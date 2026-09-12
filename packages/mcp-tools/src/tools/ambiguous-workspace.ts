@@ -206,7 +206,6 @@ export const workspaceSearch: ToolSpec = {
         query,
         found: results.length,
         results,
-        // Spelled out so the model does not over-read an empty result set.
         interpretation: results.length
           ? "Evidence exists in the workspace. Link it instead of asking someone to produce it again."
           : "No evidence found. The blocker is probably still real.",
@@ -380,6 +379,9 @@ export const workspaceDocAppend: ToolSpec = {
     return { ok: true, tool: this.name, receiptId: docId, data: { docId, title } };
   },
 };
+
+/** Alias for backward compatibility */
+export const ambiguousTask: ToolSpec = workspaceTaskCreate;
 
 export const ambiguousTools: ToolSpec[] = [
   workspaceChatPost,

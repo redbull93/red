@@ -22,6 +22,7 @@
     "seed": "npx tsx scripts/seed.ts",
     "loop:agent": "npx tsx scripts/loop.ts",
     "test:e2e": "npx tsx scripts/e2e-test.ts",
+    "test:bots": "npx tsx scripts/test-bots.ts",
     "preflight": "npx tsx scripts/preflight.ts",
     "ambiguous:probe": "npx tsx scripts/ambiguous-probe.ts",
     "trigger:dev": "npx trigger.dev@4.5.16 dev",

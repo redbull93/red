@@ -58,6 +58,12 @@ const SCHEMAS: Record<string, z.ZodRawShape> = {
     priority: z.enum(["low", "medium", "high"]).optional(),
     due: z.string().optional(),
   },
+  "ambiguous.task": {
+    title: z.string(),
+    assignee: z.string().optional(),
+    priority: z.enum(["low", "medium", "high"]).optional(),
+    due: z.string().optional(),
+  },
   "workspace.docAppend": { title: z.string().optional(), body: z.string() },
 };
 
