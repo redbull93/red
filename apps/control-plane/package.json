@@ -8,7 +8,12 @@
     "start": "next start"
   },
   "dependencies": {
+    "@red/agent": "*",
+    "@red/database": "*",
+    "@red/github": "*",
     "@red/orchestrator": "*",
+    "@red/shared": "*",
+    "@supabase/supabase-js": "^2.49.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.6.3",
     "next": "^15.5.2",

@@ -9,7 +9,9 @@
     "demo": "npx tsx src/demo.ts"
   },
   "dependencies": {
-    "@red/mcp-tools": "*"
+    "@red/mcp-tools": "*",
+    "@red/shared": "*",
+    "@red/ai": "*"
   },
   "devDependencies": {
     "tsx": "^4.20.0",

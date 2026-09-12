@@ -1,0 +1,20 @@
+{
+  "name": "@red/agent",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@red/ai": "*",
+    "@red/database": "*",
+    "@red/github": "*",
+    "@red/shared": "*",
+    "nanoid": "^5.0.9"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}
