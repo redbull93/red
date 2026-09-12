@@ -200,6 +200,17 @@ Change names in the tables if you reassign. The cut is: **orchestrator + tools =
 See [`docs/02-architecture.md`](docs/02-architecture.md) and
 [`docs/05-standup-agent.md`](docs/05-standup-agent.md).
 
+## Not only your channel
+
+`/standup` and `/standup-demo` post in **whichever channel you run them in**, after `@Standup` is invited there. Other companies must **install** the app (OAuth). 08:00 Nairobi is Trigger.dev hitting the Slack adapter. Discord is `npm run dev:discord`.
+
+Full checklist: [`docs/beyond-one-channel.md`](docs/beyond-one-channel.md).
+
+```bash
+npm run dev:slack      # Socket Mode + /internal/standup/start on :3001
+npm run dev:discord    # /standup in any invited Discord server
+```
+
 ## Run
 
 ```bash

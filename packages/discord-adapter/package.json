@@ -1,0 +1,17 @@
+{
+  "name": "@red/discord-adapter",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npx tsx --env-file=../../.env src/index.ts"
+  },
+  "dependencies": {
+    "@red/orchestrator": "*",
+    "discord.js": "^14.22.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.2"
+  }
+}
