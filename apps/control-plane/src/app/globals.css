@@ -80,3 +80,36 @@ body {
   background: rgba(255, 255, 255, 0.12);
   border-radius: 99px;
 }
+
+/* ── CopilotKit Vengeance Dark Theme ── */
+.copilot-theme-wrapper {
+  --copilot-kit-primary-color: #f43f5e;
+  --copilot-kit-contrast-color: #ffffff;
+  --copilot-kit-background-color: #0b0b10;
+  --copilot-kit-secondary-color: #12121a;
+  --copilot-kit-secondary-contrast-color: #f4f4f5;
+  --copilot-kit-separator-color: rgba(255, 255, 255, 0.1);
+  --copilot-kit-muted-color: rgba(255, 255, 255, 0.4);
+}
+
+.copilot-theme-wrapper [class*="copilotKitButton"] {
+  background: linear-gradient(135deg, #a855f7 0%, #f43f5e 100%) !important;
+  box-shadow: 0 4px 20px rgba(244, 63, 94, 0.35) !important;
+  border-radius: 9999px !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.copilot-theme-wrapper [class*="copilotKitButton"]:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 24px rgba(244, 63, 94, 0.5) !important;
+}
+
+.copilot-theme-wrapper [class*="copilotKitWindow"] {
+  background: #0d0d14 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 1rem !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75), 0 0 30px rgba(168, 85, 247, 0.15) !important;
+  backdrop-filter: blur(20px) !important;
+}
+

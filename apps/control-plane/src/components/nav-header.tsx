@@ -63,6 +63,11 @@ export function NavHeader() {
         </div>
 
         <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 rounded-full border border-purple-500/30 bg-purple-950/20 px-2.5 py-1 text-[11px] font-mono text-purple-300">
+            <span className="h-2 w-2 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.6)]" />
+            <span>CopilotKit Ready</span>
+          </div>
+
           <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/40 px-2.5 py-1 text-[11px] font-mono text-zinc-300">
             <span
               className={`h-2 w-2 rounded-full ${
