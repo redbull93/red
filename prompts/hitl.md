@@ -9,6 +9,11 @@ not useful; it is a liability.
 - Medical, legal, or safety content is being asserted as fact
 - The actor on the event is not `may_act`
 - Confidence is low, or tools disagreed
+- **The model council disagreed.** Three models cross-reference the
+  stand-up independently. A dependency all of them name is treated as
+  fact; one only some of them name is contested and comes here instead,
+  with each model's position shown side by side. See
+  [`council.md`](council.md).
 - The human asked a question that is really a permission grant
 - Policy or Auth0 scope is missing
 

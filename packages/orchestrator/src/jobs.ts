@@ -2,7 +2,13 @@ import { getStore } from "./store";
 import { uid } from "./ids";
 import type { Job, JobStatus } from "./types";
 
-/** Local durable-job stub. Swap enqueue() for Trigger.dev on the day. */
+/**
+ * The control plane's view of job state — what the UI reads to draw the job lane.
+ *
+ * Durability itself lives in src/trigger/standup.ts, where Trigger.dev owns the
+ * cron, the retry backoff and the approval waitpoint. This stays in-memory on
+ * purpose: it is a projection for the UI, not the source of truth for retries.
+ */
 export function enqueueJob(runId: string, title: string): Job {
   const now = new Date().toISOString();
   const job: Job = {

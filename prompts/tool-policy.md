@@ -13,9 +13,21 @@ Tools are hands. Hallucinated hands are fraud.
 | `health.ping` | health-fail | Startup / demo heartbeat | None |
 | `health.fail` | health-fail | Demo a failure path | Synthetic error |
 | `health.retry` | health-fail | After a failure | Signals the job queue |
+| `workspace.search` | ambiguous-workspace | Check whether a claimed blocker is still true | None |
+| `workspace.chatPost` | ambiguous-workspace | Receipt into Ambiguous Chat | Writes to the place |
+| `workspace.calendarHold` | ambiguous-workspace | Book a 10-min unblock | World changes; needs HITL |
+| `workspace.taskCreate` | ambiguous-workspace | Own the follow-up | World changes |
+| `workspace.docAppend` | ambiguous-workspace | Durable stand-up log | World changes |
+
+Workspace tools degrade to honest stubs without `AMBIGUOUS_API_KEY`. See
+[`../docs/06-ambiguous-setup.md`](../docs/06-ambiguous-setup.md).
 
 ## Policy
 
+0. **Verify before you repeat.** A teammate saying "I'm waiting on X" is a
+   claim, not a fact. Check `workspace.search` first — if X already exists,
+   link it instead of asking someone to produce it again. Relaying an
+   already-solved blocker is how an agent becomes another notification tax.
 1. **Ground, then act.** If the place already contains the fact, do not
    search. If the world might have changed, search once.
 2. **One act per loop** unless the human asked for a bundle and HITL
