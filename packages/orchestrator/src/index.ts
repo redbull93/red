@@ -27,23 +27,6 @@ export {
 export type { SeatId, RouterFailure, RouterResult } from "./router";
 export { listVerdicts, loadVerdict, saveVerdict } from "./verdict-cache";
 export { loadRuntimeEnv } from "./runtime-env";
-export { createRunStream, createGlobalStream, formatSseEvent } from "./stream";
-export {
-  getAllUsage,
-  getRunUsage,
-  getUsageByOrg,
-  getUsageByUser,
-  recordUsage,
-} from "./usage";
-export {
-  getActiveBlockers,
-  getAllBlockers,
-  getRecurringBlockers,
-  recordBlockers,
-  renderMemoryContext,
-  resolveBlocker,
-} from "./memory";
-export { sanitizeSummary, validateAction, validateApproverPermission } from "./guardrails";
 export * from "./agent-loop";
 // ── New modules ───────────────────────────────────────────────────
 export {

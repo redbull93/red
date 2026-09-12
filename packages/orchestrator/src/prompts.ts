@@ -49,6 +49,13 @@ Reply with a single JSON object and nothing else:
 confidence is your own certainty from 0 to 1. Use a low number when the replies are thin or ambiguous — an honest low score is more useful to the human than false certainty.`;
 
 export const TOOL_PREAMBLE = `Tools: environment.read, environment.receipt, search.web, world.act, health.ping, health.fail, health.retry.
+Workspace tools (Ambiguous): workspace.search, workspace.chatPost, workspace.calendarHold, workspace.taskCreate, workspace.docAppend.
+
 For stand-up: world.act kind="standup.summary" with a summary and suggestedAction.
 Then environment.receipt posts that summary back to the channel.
-Use search.web (Exa) only to enrich a real blocker with a PR or prior context.`;
+
+Before you repeat a blocker as fact, check it with workspace.search. Someone saying "I'm waiting on X" does not mean X does not exist yet — if the doc, PR or task is already in the workspace, link it instead of asking a teammate to produce it again. That check is the most useful thing you do.
+
+Prefer workspace.calendarHold over an @-mention when two people need to close a loop: an invite is an action, a nudge is just another notification. Holds and @-mentions need approval first.
+
+Use search.web (Exa) only for facts outside the workspace.`;

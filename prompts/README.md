@@ -7,6 +7,7 @@ Judge-aligned language. **No product lives here.**
 | [system.md](system.md) | Every turn. Identity of an environment-native agent. |
 | [environment-context.md](environment-context.md) | Every turn. The place is the prompt. |
 | [tool-policy.md](tool-policy.md) | Tool preamble. Hands, not stories. |
+| [council.md](council.md) | Once per run, in parallel to three models. Disagreement escalates. |
 | [hitl.md](hitl.md) | Before irreversible or spendy acts. |
 | [demo-narration.md](demo-narration.md) | After the loop works. Voiceover only. |
 | [judge-premortem.md](judge-premortem.md) | 12:30 and 14:00. Attack your own story. |

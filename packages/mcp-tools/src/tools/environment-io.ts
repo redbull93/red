@@ -1,4 +1,5 @@
 import type { ToolSpec } from "../types";
+import { ambiguousConfigured, workspaceChatPost } from "./ambiguous-workspace";
 
 export const environmentRead: ToolSpec = {
   name: "environment.read",
@@ -56,16 +57,36 @@ export const environmentReceipt: ToolSpec = {
         error: "channelId and body are required",
       };
     }
+    // Always record locally so the control plane has the trace, then also land it
+    // in the real place when one is wired. If the live post fails we say so
+    // rather than reporting a success the team will never see.
     const written = ctx.writeReceipt({
       channelId,
       body,
       receiptId: args.receiptId ? String(args.receiptId) : undefined,
     });
+
+    let landedIn = "memory";
+    let liveError: string | undefined;
+
+    if (ambiguousConfigured()) {
+      const posted = await workspaceChatPost.handler(
+        { channelId: process.env.AMBIGUOUS_STANDUP_CHANNEL ?? channelId, body },
+        ctx,
+      );
+      if (posted.ok) {
+        landedIn = "ambiguous";
+      } else {
+        liveError = posted.error;
+      }
+    }
+
     return {
-      ok: true,
+      ok: !liveError,
       tool: "environment.receipt",
       receiptId: written.receiptId,
-      data: { ...written, channelId, body },
+      data: { ...written, channelId, body, landedIn },
+      error: liveError,
     };
   },
 };
