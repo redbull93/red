@@ -21,7 +21,8 @@
     "bots": "npm run start --workspace=@red/bots",
     "seed": "npx tsx scripts/seed.ts",
     "loop:agent": "npx tsx scripts/loop.ts",
-    "test:e2e": "npx tsx scripts/e2e-test.ts"
+    "test:e2e": "npx tsx scripts/e2e-test.ts",
+    "test:bots": "npx tsx scripts/test-bots.ts"
   },
   "engines": {
     "node": ">=20"
