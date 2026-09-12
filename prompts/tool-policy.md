@@ -8,7 +8,7 @@ Tools are hands. Hallucinated hands are fraud.
 | --- | --- | --- | --- |
 | `environment.read` | environment-io | You need more of the place | None |
 | `environment.receipt` | environment-io | You finished something | Writes back to the place |
-| `search.web` | exa-search | You need live world facts | None |
+| `search.web` | exa-search (`exa-js` `/search` + highlights) | Live web facts to enrich a blocker (PR, docs). Natural-language `query` only. | None |
 | `world.act` | act-receipt | One external action | World changes; returns receipt |
 | `health.ping` | health-fail | Startup / demo heartbeat | None |
 | `health.fail` | health-fail | Demo a failure path | Synthetic error |
