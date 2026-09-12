@@ -9,10 +9,12 @@
     "red-mcp": "./src/server.ts"
   },
   "scripts": {
-    "start": "npx tsx src/server.ts"
+    "start": "npx tsx src/server.ts",
+    "test": "npx tsx --test src/tools/exa-search.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.0",
+    "exa-js": "^2.0.10",
     "zod": "^3.24.2"
   },
   "devDependencies": {

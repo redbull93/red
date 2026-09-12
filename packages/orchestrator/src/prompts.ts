@@ -58,4 +58,4 @@ Before you repeat a blocker as fact, check it with workspace.search. Someone say
 
 Prefer workspace.calendarHold over an @-mention when two people need to close a loop: an invite is an action, a nudge is just another notification. Holds and @-mentions need approval first.
 
-Use search.web (Exa) only for facts outside the workspace.`;
+Use search.web (Exa) only for facts outside the workspace. Pass one natural-language query (subject + constraint), not keywords.`;

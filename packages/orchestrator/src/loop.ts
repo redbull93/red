@@ -30,30 +30,54 @@ import type {
 
 const places = new Map<string, PlaceSnapshot>();
 
-function toolContext(runId: string, orgId?: string, approver?: ApproverIdentity) {
+export type ReceiptInput = {
+  channelId: string;
+  body: string;
+  receiptId?: string;
+};
+
+export type ReceiptSink = (input: ReceiptInput) => Promise<void> | void;
+
+let receiptSink: ReceiptSink | undefined;
+
+/** Slack/Discord adapters register this so environment.receipt lands in the place. */
+export function setReceiptSink(sink: ReceiptSink | undefined) {
+  receiptSink = sink;
+}
+
+function toolContext(
+  runId: string,
+  orgId?: string,
+  approver?: ApproverIdentity,
+) {
+  const pending: Promise<unknown>[] = [];
   return {
-    now: () => new Date(),
-    readPlace: (channelId: string) => places.get(channelId) ?? null,
-    writeReceipt: (input: {
-      channelId: string;
-      body: string;
-      receiptId?: string;
-    }) => {
-      const existing = places.get(input.channelId);
-      const memory = createMemoryPlace(existing ?? undefined);
-      const written = memory.writeReceipt(input);
-      const next = memory.readPlace(input.channelId);
-      if (next) places.set(input.channelId, next);
-      getStore().receipts.push({
-        id: written.receiptId,
-        runId,
-        channelId: input.channelId,
-        body: input.body,
-        at: written.landedAt,
-        approvedBy: approver,
-        orgId,
-      });
-      return written;
+    ctx: {
+      now: () => new Date(),
+      readPlace: (channelId: string) => places.get(channelId) ?? null,
+      writeReceipt: (input: ReceiptInput) => {
+        const existing = places.get(input.channelId);
+        const memory = createMemoryPlace(existing ?? undefined);
+        const written = memory.writeReceipt(input);
+        const next = memory.readPlace(input.channelId);
+        if (next) places.set(input.channelId, next);
+        getStore().receipts.push({
+          id: written.receiptId,
+          runId,
+          channelId: input.channelId,
+          body: input.body,
+          at: written.landedAt,
+          approvedBy: approver,
+          orgId,
+        });
+        if (receiptSink) {
+          pending.push(Promise.resolve(receiptSink({ ...input, ...written })));
+        }
+        return written;
+      },
+    },
+    flush: async () => {
+      await Promise.all(pending);
     },
   };
 }
@@ -228,7 +252,11 @@ export async function ingestEnvironmentEvent(
     messages.push({ role: "user", content: renderVerdictBlock(verdict) });
   }
 
-  const ctx = toolContext(run.id, event.orgId, event.authenticatedUser);
+  const { ctx, flush } = toolContext(
+    run.id,
+    event.orgId,
+    event.authenticatedUser,
+  );
   const mayAct = event.actors.some((a) => a.mayAct);
   // Disagreement between models is a reason to ask a human, exactly as
   // prompts/hitl.md already says for tools that disagree.
@@ -285,6 +313,7 @@ export async function ingestEnvironmentEvent(
         run.status = "completed";
         run.finishedAt = new Date().toISOString();
         setJobStatus(job.id, "succeeded");
+        await flush();
         emitAgUi({ type: "RunFinished", run });
         return run;
       }
@@ -405,6 +434,7 @@ export async function ingestEnvironmentEvent(
     run.status = "completed";
     run.finishedAt = new Date().toISOString();
     setJobStatus(job.id, "succeeded");
+    await flush();
     emitAgUi({ type: "RunFinished", run });
     return run;
   } catch (error) {
@@ -457,7 +487,7 @@ export async function resolveApproval(
     run.status = "stopped";
     run.finishedAt = new Date().toISOString();
     cancelRunJobs(run.id);
-    const ctx = toolContext(run.id, run.event.orgId, approver);
+    const { ctx, flush } = toolContext(run.id, run.event.orgId, approver);
     await dispatchTool(
       "environment.receipt",
       {
@@ -466,6 +496,7 @@ export async function resolveApproval(
       },
       ctx,
     );
+    await flush();
     trace(
       run.id,
       "hitl",

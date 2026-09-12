@@ -74,6 +74,52 @@ export function hasModelKey() {
   );
 }
 
+export async function completePlain(
+  system: string,
+  user: string,
+): Promise<string | null> {
+  if (!hasModelKey()) return null;
+
+  const openRouter = Boolean(process.env.OPENROUTER_API_KEY);
+  const url = openRouter
+    ? "https://openrouter.ai/api/v1/chat/completions"
+    : `${process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1"}/chat/completions`;
+  const key =
+    process.env.OPENROUTER_API_KEY ||
+    process.env.OPENAI_API_KEY ||
+    process.env.AI_GATEWAY_API_KEY ||
+    process.env.MODEL_API_KEY;
+  const model = openRouter
+    ? process.env.OPENROUTER_MODEL || "openai/gpt-4.1-mini"
+    : process.env.OPENAI_MODEL || "gpt-4.1-mini";
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${key}`,
+      ...(openRouter
+        ? {
+            "HTTP-Referer": "https://github.com/redbull93/red",
+            "X-Title": "red environment-first kit",
+          }
+        : {}),
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    }),
+  });
+
+  if (!response.ok) return null;
+  const json = (await response.json()) as ChatCompletion;
+  const text = json.choices?.[0]?.message?.content?.trim();
+  return text || null;
+}
+
 /**
  * The seat that drives the tool loop. Defaults to DeepSeek because it is the one
  * seat outside Agent Router's daily rationing, so the loop keeps working when GPT

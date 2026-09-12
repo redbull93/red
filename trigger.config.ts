@@ -14,7 +14,7 @@ import { defineConfig } from "@trigger.dev/sdk";
  */
 export default defineConfig({
   project: process.env.TRIGGER_PROJECT_REF ?? "proj_standup_agent",
-  dirs: ["./packages/orchestrator/src/trigger"],
+  dirs: ["./src/trigger", "./packages/orchestrator/src/trigger"],
 
   // Council calls fan out to three models and the tool loop runs up to six
   // turns, so a stand-up can legitimately take a couple of minutes.
