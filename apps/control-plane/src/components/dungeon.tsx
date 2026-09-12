@@ -56,6 +56,7 @@ type Verdict = {
   suggestedAction: string;
   unverified: boolean;
   cached: boolean;
+  demo?: boolean;
   opinions: Opinion[];
 };
 
@@ -256,6 +257,12 @@ export function Dungeon() {
             )}
             {verdict.cached && (
               <Pill tone="warn">replayed from the archive, not live</Pill>
+            )}
+            {/* A seeded verdict is indistinguishable from a real one on screen, so
+                it has to say so. Nobody should have to check a run id to know
+                whether three models really said this. */}
+            {verdict.demo && (
+              <Pill tone="warn">seeded demo data — no model was asked</Pill>
             )}
             <span className="ml-auto font-mono text-[10px] text-zinc-500">
               {new Date(verdict.at).toLocaleTimeString()}

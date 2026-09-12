@@ -33,6 +33,8 @@ export {
 export type { SeatId, RouterFailure, RouterResult } from "./router";
 export { listVerdicts, loadVerdict, saveVerdict } from "./verdict-cache";
 export { loadRuntimeEnv } from "./runtime-env";
+export { seedDemoData } from "./demo-seed";
+export type { SeedSummary } from "./demo-seed";
 export * from "./agent-loop";
 // ── New modules ───────────────────────────────────────────────────
 export {

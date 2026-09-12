@@ -4,7 +4,7 @@ import {
   highlightsToSnippet,
   mapExaResults,
   searchWeb,
-} from "./exa-search.ts";
+} from "./exa-search";
 
 const ctx = {
   now: () => new Date(),

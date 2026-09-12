@@ -1,7 +1,7 @@
 {
   "name": "StandUp",
   "private": true,
-  "description": "StandUp — Slack/Discord daily stand-up that cross-references blockers.",
+  "description": "StandUp \u2014 Slack/Discord daily stand-up that cross-references blockers.",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -31,7 +31,9 @@
     "trigger:dev": "npx trigger.dev@4.5.16 dev",
     "trigger:deploy": "npx trigger.dev@4.5.16 deploy",
     "council:capture": "npx tsx scripts/capture-council.ts",
-    "council:replay": "COUNCIL_REPLAY=1 npm run demo --workspace=@red/orchestrator --"
+    "council:replay": "COUNCIL_REPLAY=1 npm run demo --workspace=@red/orchestrator --",
+    "seed:ambiguous": "npx tsx scripts/seed-ambiguous.ts",
+    "seed:demo": "npx tsx scripts/seed-demo.ts"
   },
   "engines": {
     "node": ">=20"
