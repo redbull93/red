@@ -1,4 +1,3 @@
-import Exa from "exa-js";
 import type { ToolSpec } from "../types";
 
 /** Slack/Discord receipts stay short — intentional product cap, not a tool arg. */
@@ -75,16 +74,58 @@ export const searchWeb: ToolSpec = {
     }
 
     try {
-      const exa = new Exa(key);
-      const result = await exa.search(query, {
-        type: "auto",
-        contents: { highlights: true },
-        numResults: CHANNEL_RESULT_CAP,
-      });
+      let results: Array<{ title: string; url: string; snippet: string }> = [];
 
-      const results = mapExaResults(
-        (result.results ?? []) as ExaHit[],
-      );
+      try {
+        const { default: Exa } = (await import("exa-js")) as unknown as {
+          default: new (k: string) => {
+            search: (
+              q: string,
+              opts: unknown,
+            ) => Promise<{ results?: ExaHit[] }>;
+          };
+        };
+        const exa = new Exa(key);
+        const result = await exa.search(query, {
+          type: "auto",
+          contents: { highlights: true },
+          numResults: CHANNEL_RESULT_CAP,
+        });
+        results = mapExaResults((result.results ?? []) as ExaHit[]);
+      } catch {
+        // Fallback to native HTTP fetch if exa-js package is not installed
+        const response = await fetch("https://api.exa.ai/search", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": key,
+          },
+          body: JSON.stringify({
+            query,
+            numResults: CHANNEL_RESULT_CAP,
+            contents: { text: true },
+          }),
+        });
+
+        if (!response.ok) {
+          const detail = await response.text();
+          return {
+            ok: false,
+            tool: "search.web",
+            data: { query, status: response.status },
+            error: detail.slice(0, 400),
+          };
+        }
+
+        const json = (await response.json()) as {
+          results?: Array<{ title?: string; url?: string; text?: string; highlights?: string[] }>;
+        };
+        results = (json.results ?? []).map((r) => ({
+          title: r.title ?? "",
+          url: r.url ?? "",
+          snippet: highlightsToSnippet(r.highlights) || (r.text ?? "").slice(0, 280),
+        }));
+      }
 
       return { ok: true, tool: "search.web", data: { query, results } };
     } catch (error) {
