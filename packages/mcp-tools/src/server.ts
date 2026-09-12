@@ -31,7 +31,7 @@ function schemaFor(specName: string) {
     return { channelId: z.string(), body: z.string(), receiptId: z.string().optional() };
   }
   if (specName === "search.web") {
-    return { query: z.string(), numResults: z.number().optional() };
+    return { query: z.string() };
   }
   if (specName === "world.act") {
     return {
