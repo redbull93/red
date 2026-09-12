@@ -7,7 +7,16 @@ import type { ToolContext, ToolResult, ToolSpec } from "./types";
 
 export type { PlaceSnapshot, ToolContext, ToolResult, ToolSpec } from "./types";
 export { createMemoryPlace } from "./memory-place";
-export { ambiguousConfigured, ambiguousTools, ambiguousTask } from "./tools/ambiguous-workspace";
+export {
+  ambiguousConfigured,
+  ambiguousTools,
+  ambiguousTask,
+  workspaceChatPost,
+  workspaceSearch,
+  workspaceCalendarHold,
+  workspaceTaskCreate,
+  workspaceDocAppend,
+} from "./tools/ambiguous-workspace";
 
 export const toolSpecs: ToolSpec[] = [
   environmentRead,

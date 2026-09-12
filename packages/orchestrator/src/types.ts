@@ -142,6 +142,12 @@ export type Run = {
   finishedAt?: string;
   assistantText?: string;
   verdict?: CouncilVerdict;
+  /**
+   * Seeded demo data rather than a real run. Carried on the record itself, not
+   * inferred from an id prefix, so the UI can label it and nobody mistakes a
+   * fixture for something three models actually said.
+   */
+  demo?: boolean;
 };
 
 export type EngineSnapshot = {
@@ -203,6 +209,12 @@ export type CouncilVerdict = {
   unverified: boolean;
   /** True when replayed from a captured fixture rather than run live. */
   cached: boolean;
+  /**
+   * True when the opinions were written by hand for a demo instead of returned by
+   * a model. Replaying a real captured council is honest; hardcoding three
+   * opinions is only honest if it says so on the record.
+   */
+  demo?: boolean;
   opinions: ModelOpinion[];
 };
 
