@@ -4,6 +4,13 @@ import {
   type PlaceSnapshot,
 } from "@red/mcp-tools";
 import { renderEnvironmentBlock, toAgentContext } from "./context";
+import {
+  councilEnabled,
+  needsHuman,
+  renderVerdictBlock,
+  runCouncil,
+  summarizeVerdict,
+} from "./council";
 import { uid } from "./ids";
 import { cancelRunJobs, enqueueJob, setJobStatus } from "./jobs";
 import { completeTurn, type ChatMessage, type TurnContext } from "./llm";
@@ -13,7 +20,13 @@ import { getStore } from "./store";
 import { trace } from "./traces";
 import { recordBlockers, renderMemoryContext } from "./memory";
 import { validateAction, validateApproverPermission } from "./guardrails";
-import type { Approval, ApproverIdentity, EnvironmentEvent, Run } from "./types";
+import type {
+  Approval,
+  ApproverIdentity,
+  CouncilVerdict,
+  EnvironmentEvent,
+  Run,
+} from "./types";
 
 const places = new Map<string, PlaceSnapshot>();
 
@@ -56,8 +69,91 @@ function seedPlace(event: ReturnType<typeof toAgentContext>) {
   });
 }
 
+/**
+ * Runs the council and traces each seat separately, so the control plane can show
+ * three lanes and name any model that abstained. Returns undefined when the
+ * council is off or has no key, in which case the loop behaves as it did before.
+ */
+async function councilPass(
+  runId: string,
+  event: ReturnType<typeof toAgentContext>,
+): Promise<CouncilVerdict | undefined> {
+  if (!councilEnabled()) return undefined;
+
+  const verdict = await runCouncil(event);
+
+  trace(
+    runId,
+    "council",
+    verdict.cached ? "Council (replayed capture)" : "Council",
+    summarizeVerdict(verdict),
+    {
+      seated: verdict.seated,
+      consensus: verdict.consensus.map((c) => c.text),
+      dissent: verdict.dissent.map((c) => ({ text: c.text, agreedBy: c.agreedBy })),
+      cached: verdict.cached,
+    },
+  );
+
+  for (const opinion of verdict.opinions) {
+    if (opinion.status === "abstained") {
+      trace(
+        runId,
+        "council",
+        `${opinion.label} abstained`,
+        opinion.abstainReason ?? "unknown",
+        { seat: opinion.seat, model: opinion.model, latencyMs: opinion.latencyMs },
+      );
+      continue;
+    }
+    trace(
+      runId,
+      "council",
+      `${opinion.label} answered`,
+      opinion.dependencies.length
+        ? opinion.dependencies
+            .map((d) => `${d.waiter} waits on ${d.blocker} (${d.artifact})`)
+            .join("; ")
+        : "no dependencies found",
+      {
+        seat: opinion.seat,
+        model: opinion.model,
+        confidence: opinion.confidence,
+        suggestedAction: opinion.suggestedAction,
+        reasoning: opinion.reasoning?.slice(0, 600),
+        latencyMs: opinion.latencyMs,
+        totalTokens: opinion.totalTokens,
+      },
+    );
+  }
+
+  return verdict;
+}
+
+function approvalReason(input: {
+  mayAct: boolean;
+  requireHitl?: boolean;
+  verdict?: CouncilVerdict;
+}): string {
+  if (!input.mayAct) return "No actor on this event may act.";
+  if (input.verdict?.dissent.length) {
+    const contested = input.verdict.dissent
+      .map((c) => `${c.text} (only ${c.agreedBy.join(", ")})`)
+      .join("; ");
+    return `The council split. Contested: ${contested}`;
+  }
+  if (input.verdict?.unverified) {
+    const abstained = input.verdict.abstained
+      .map((a) => `${a.label} ${a.reason}`)
+      .join("; ");
+    return `Only ${input.verdict.seated.length} model answered, so nothing was corroborated. ${abstained}`;
+  }
+  return "Policy: irreversible or flagged act needs a human.";
+}
+
 export async function ingestEnvironmentEvent(
   raw: EnvironmentEvent,
+  options: { verdict?: CouncilVerdict } = {},
 ): Promise<Run> {
   const event = toAgentContext(raw);
   const store = getStore();
@@ -105,6 +201,20 @@ export async function ingestEnvironmentEvent(
     });
   }
 
+  // ── Model council: three models cross-reference the same stand-up ──
+  // A re-ingest after approval reuses the verdict the human already saw, rather
+  // than spending another three model calls to re-derive it.
+  const verdict = options.verdict ?? (await councilPass(run.id, event));
+  if (verdict) run.verdict = verdict;
+  if (options.verdict) {
+    trace(
+      run.id,
+      "council",
+      "Council verdict carried over",
+      `Human approved: ${summarizeVerdict(options.verdict)}`,
+    );
+  }
+
   const memoryBlock = renderMemoryContext(event.channelId, event.orgId);
   const systemContent = memoryBlock
     ? `${SYSTEM_PROMPT}\n\n${TOOL_PREAMBLE}\n\n${memoryBlock}`
@@ -114,25 +224,32 @@ export async function ingestEnvironmentEvent(
     { role: "system", content: systemContent },
     { role: "user", content: renderEnvironmentBlock(event) },
   ];
+  if (verdict) {
+    messages.push({ role: "user", content: renderVerdictBlock(verdict) });
+  }
 
   const ctx = toolContext(run.id, event.orgId, event.authenticatedUser);
   const mayAct = event.actors.some((a) => a.mayAct);
-  if (event.requireHitl || !mayAct) {
+  // Disagreement between models is a reason to ask a human, exactly as
+  // prompts/hitl.md already says for tools that disagree.
+  const councilPause = verdict && !event.councilApproved ? needsHuman(verdict) : false;
+
+  if (event.requireHitl || !mayAct || councilPause) {
     const approval: Approval = {
       id: uid("apr"),
       runId: run.id,
       at: new Date().toISOString(),
-      reason: mayAct
-        ? "Policy: irreversible or flagged act needs a human."
-        : "No actor on this event may act.",
+      reason: approvalReason({ mayAct, requireHitl: event.requireHitl, verdict }),
       proposedAction: "world.act",
-      preview: event.signalBody.slice(0, 180),
+      preview: verdict?.suggestedAction || event.signalBody.slice(0, 180),
       risk: event.urgency === "high" ? "high" : "medium",
       requiredRole: event.urgency === "high" ? "tech-lead" : undefined,
       principal: event.principal ?? event.actors[0]?.id ?? "human",
       status: "pending",
       expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
       orgId: event.orgId,
+      dissent: verdict?.dissent.length ? verdict.dissent : undefined,
+      opinions: councilPause ? verdict?.opinions : undefined,
     };
     store.approvals.push(approval);
     run.status = "awaiting_hitl";
@@ -175,6 +292,10 @@ export async function ingestEnvironmentEvent(
       messages.push({
         role: "assistant",
         content: turn.text || "",
+        // The tool results appended below are replies to these calls, and strict
+        // providers reject the next turn if the link is missing.
+        toolCalls: turn.toolCalls,
+        reasoning: turn.reasoning,
       });
 
       // ── Parallel tool dispatch ──
@@ -366,12 +487,18 @@ export async function resolveApproval(
     `Approved by ${approverLabel}. Running the proposed act.`,
     { approver },
   );
-  return ingestEnvironmentEvent({
-    ...run.event,
-    id: uid("evt"),
-    requireHitl: false,
-    authenticatedUser: approver,
-  });
+  return ingestEnvironmentEvent(
+    {
+      ...run.event,
+      id: uid("evt"),
+      requireHitl: false,
+      authenticatedUser: approver,
+      // Without this the replayed event hits the same council dissent and pauses
+      // again, ignoring the decision the human just made.
+      councilApproved: true,
+    },
+    { verdict: run.verdict },
+  );
 }
 
 export function fixtureEvent(
