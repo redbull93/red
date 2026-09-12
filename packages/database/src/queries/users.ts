@@ -136,3 +136,27 @@ export async function listUsersByWorkspace(workspaceId: string): Promise<User[]>
 
   return getMemoryStore().users.filter((u) => u.workspaceId === workspaceId);
 }
+
+export async function listUsers(workspaceId?: string): Promise<User[]> {
+  if (workspaceId) {
+    return listUsersByWorkspace(workspaceId);
+  }
+  const client = getSupabaseClient();
+  if (client) {
+    const { data, error } = await client.from("users").select("*");
+    if (!error && data) {
+      return data.map((d) => ({
+        id: d.id,
+        workspaceId: d.workspace_id,
+        platformUserId: d.platform_user_id,
+        name: d.name,
+        email: d.email ?? undefined,
+        role: d.role ?? undefined,
+        avatarUrl: d.avatar_url ?? undefined,
+        createdAt: d.created_at,
+      }));
+    }
+  }
+  return getMemoryStore().users;
+}
+
