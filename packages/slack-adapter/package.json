@@ -1,0 +1,22 @@
+{
+  "name": "@red/slack-adapter",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "npx tsx --env-file=../../.env src/bot.ts",
+    "start": "npx tsx src/start.ts"
+  },
+  "dependencies": {
+    "@red/orchestrator": "*",
+    "@red/shared": "*",
+    "@slack/bolt": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.2"
+  }
+}

@@ -1,20 +1,45 @@
 {
-  "name": "red",
+  "name": "StandUp",
   "private": true,
-  "description": "StandUp Agent — Slack/Discord daily stand-up that cross-references blockers.",
+  "description": "StandUp — Slack/Discord daily stand-up that cross-references blockers.",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
     "dev": "npm run dev --workspace=control-plane",
+    "dev:slack": "npm run dev --workspace=@red/slack-adapter",
+    "dev:discord": "npm run dev --workspace=@red/discord-adapter",
     "build": "npm run build --workspace=control-plane",
     "mcp": "npm run start --workspace=@red/mcp-tools",
     "loop": "npm run demo --workspace=@red/orchestrator --",
     "loop:fail": "npm run demo --workspace=@red/orchestrator -- --fail",
-    "loop:hitl": "npm run demo --workspace=@red/orchestrator -- --hitl"
+    "loop:hitl": "npm run demo --workspace=@red/orchestrator -- --hitl",
+    "test:exa": "npm run test --workspace=@red/mcp-tools",
+    "test": "npm run test --workspace=@red/orchestrator",
+    "smoke:openai": "npm run smoke --workspace=@red/ai",
+    "slack": "npm run start --workspace=@red/slack-adapter",
+    "discord": "npm run start --workspace=@red/discord-adapter",
+    "discord:deploy": "npm run deploy --workspace=@red/discord-adapter",
+    "bots": "npm run start --workspace=@red/bots",
+    "seed": "npx tsx scripts/seed.ts",
+    "loop:agent": "npx tsx scripts/loop.ts",
+    "test:e2e": "npx tsx scripts/e2e-test.ts",
+    "test:bots": "npx tsx scripts/test-bots.ts",
+    "preflight": "npx tsx scripts/preflight.ts",
+    "ambiguous:probe": "npx tsx scripts/ambiguous-probe.ts",
+    "trigger:dev": "npx trigger.dev@4.5.16 dev",
+    "trigger:deploy": "npx trigger.dev@4.5.16 deploy",
+    "council:capture": "npx tsx scripts/capture-council.ts",
+    "council:replay": "COUNCIL_REPLAY=1 npm run demo --workspace=@red/orchestrator --"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "@trigger.dev/sdk": "4.5.16"
+  },
+  "devDependencies": {
+    "trigger.dev": "4.5.16"
   }
 }

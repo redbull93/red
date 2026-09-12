@@ -23,27 +23,52 @@ const server = new McpServer({
   version: "0.1.0",
 });
 
+/**
+ * Declared as one record rather than a chain of returns: separate object literals
+ * infer as a union, and TypeScript then widens every key to `T | undefined`,
+ * which does not satisfy Zod's raw-shape constraint.
+ */
+const SCHEMAS: Record<string, z.ZodRawShape> = {
+  "environment.read": { channelId: z.string() },
+  "environment.receipt": {
+    channelId: z.string(),
+    body: z.string(),
+    receiptId: z.string().optional(),
+  },
+  "search.web": { query: z.string(), numResults: z.number().optional() },
+  "world.act": {
+    kind: z.string(),
+    summary: z.string(),
+    payload: z.record(z.unknown()).optional(),
+  },
+  "health.ping": { note: z.string().optional() },
+  "health.fail": { reason: z.string().optional() },
+  "health.retry": { jobHint: z.string().optional() },
+  "workspace.chatPost": { channelId: z.string().optional(), body: z.string() },
+  "workspace.search": { query: z.string(), limit: z.number().optional() },
+  "workspace.calendarHold": {
+    title: z.string(),
+    attendeeIds: z.array(z.string()),
+    durationMinutes: z.number().optional(),
+    startsAt: z.string().optional(),
+  },
+  "workspace.taskCreate": {
+    title: z.string(),
+    assignee: z.string().optional(),
+    priority: z.enum(["low", "medium", "high"]).optional(),
+    due: z.string().optional(),
+  },
+  "ambiguous.task": {
+    title: z.string(),
+    assignee: z.string().optional(),
+    priority: z.enum(["low", "medium", "high"]).optional(),
+    due: z.string().optional(),
+  },
+  "workspace.docAppend": { title: z.string().optional(), body: z.string() },
+};
+
 function schemaFor(specName: string): z.ZodRawShape {
-  if (specName === "environment.read") {
-    return { channelId: z.string() };
-  }
-  if (specName === "environment.receipt") {
-    return { channelId: z.string(), body: z.string(), receiptId: z.string().optional() };
-  }
-  if (specName === "search.web") {
-    return { query: z.string(), numResults: z.number().optional() };
-  }
-  if (specName === "world.act") {
-    return {
-      kind: z.string(),
-      summary: z.string(),
-      payload: z.record(z.unknown()).optional(),
-    };
-  }
-  if (specName === "health.ping") return { note: z.string().optional() };
-  if (specName === "health.fail") return { reason: z.string().optional() };
-  if (specName === "health.retry") return { jobHint: z.string().optional() };
-  return {};
+  return SCHEMAS[specName] ?? {};
 }
 
 for (const spec of toolSpecs) {

@@ -1,0 +1,24 @@
+{
+  "name": "@red/bots",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "npx tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@red/agent": "*",
+    "@red/ai": "*",
+    "@red/database": "*",
+    "@red/discord-adapter": "*",
+    "@red/github": "*",
+    "@red/orchestrator": "*",
+    "@red/shared": "*",
+    "@red/slack-adapter": "*"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.2"
+  }
+}

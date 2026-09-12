@@ -15,6 +15,14 @@ type Trace = {
   detail: string;
 };
 
+type Approver = {
+  userId: string;
+  email?: string;
+  name?: string;
+  roles?: string[];
+  orgId?: string;
+};
+
 type Approval = {
   id: string;
   reason: string;
@@ -22,6 +30,8 @@ type Approval = {
   risk: string;
   principal: string;
   status: string;
+  requiredRole?: string;
+  resolvedBy?: Approver;
 };
 
 type Job = {
@@ -37,6 +47,8 @@ type Receipt = {
   channelId: string;
   body: string;
   at: string;
+  approvedBy?: Approver;
+  orgId?: string;
 };
 
 type Signal = {
@@ -48,12 +60,18 @@ type Signal = {
   placeOnlyContext: string;
 };
 
+type AuthInfo = {
+  configured: boolean;
+  currentUser?: Approver;
+};
+
 type Snapshot = {
   traces: Trace[];
   approvals: Approval[];
   jobs: Job[];
   receipts: Receipt[];
   signals: Signal[];
+  auth?: AuthInfo;
 };
 
 const empty: Snapshot = {
@@ -149,6 +167,54 @@ export function MissionControl() {
             <FireButton disabled={busy} onClick={() => void fire("fail")} label="Force fail + retry" tone="danger" />
           </div>
         </header>
+
+        {/* Auth0 Identity & Session Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/40 px-4 py-2.5 backdrop-blur">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+            <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">
+              Auth0 Identity:
+            </span>
+            <span className="font-mono text-xs font-medium text-zinc-200">
+              {state.auth?.currentUser?.name ?? "Lead Engineer (Local Dev)"}
+            </span>
+            <span className="font-mono text-[11px] text-zinc-500">
+              ({state.auth?.currentUser?.email ?? "lead@red.dev"})
+            </span>
+            <div className="flex gap-1">
+              {(state.auth?.currentUser?.roles ?? ["tech-lead", "admin"]).map((r) => (
+                <span
+                  key={r}
+                  className="rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-fuchsia-300"
+                >
+                  {r}
+                </span>
+              ))}
+            </div>
+            {state.auth?.currentUser?.orgId && (
+              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-sky-300">
+                Org: {state.auth.currentUser.orgId}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {state.auth?.configured ? (
+              <a
+                href="/api/auth/logout"
+                className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 hover:text-rose-300 transition"
+              >
+                Logout ↗
+              </a>
+            ) : (
+              <a
+                href="/api/auth/login"
+                className="font-mono text-[10px] uppercase tracking-wider text-sky-400 hover:text-sky-300 transition"
+              >
+                Sign in with Auth0 ↗
+              </a>
+            )}
+          </div>
+        </div>
 
         <div className="overflow-hidden rounded-full border border-white/10 bg-white/5 py-2">
           <div className="animate-ticker flex w-[200%] gap-12 whitespace-nowrap font-mono text-[11px] uppercase tracking-[0.28em] text-zinc-400">
@@ -310,9 +376,16 @@ export function MissionControl() {
                 key={r.id}
                 className="min-w-[220px] flex-1 rounded-2xl border border-white/10 bg-black/40 px-4 py-3"
               >
-                <p className="font-mono text-[10px] uppercase tracking-widest text-teal-300">
-                  {r.channelId}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-teal-300">
+                    {r.channelId}
+                  </p>
+                  {r.approvedBy && (
+                    <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[9px] text-emerald-300">
+                      ✓ Approved: {r.approvedBy.name ?? r.approvedBy.userId}
+                    </span>
+                  )}
+                </div>
                 <p className="mt-1 text-sm text-zinc-100">{r.body}</p>
               </div>
             ))}
