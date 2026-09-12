@@ -97,11 +97,13 @@ function idOf(data: unknown, fallback: string, depth = 0): string {
   const direct = record.id ?? record._id ?? record.uuid;
   if (typeof direct === "string" && direct) return direct;
 
-  for (const key of ["data", "task", "event", "page", "message", "result"]) {
-    if (key in record) {
-      const found = idOf(record[key], "", depth + 1);
-      if (found) return found;
-    }
+  // Walk every nested object rather than a list of expected wrapper names: the
+  // envelope differs per module, and a task really was created even when the key
+  // holding it is one nobody guessed.
+  for (const value of Object.values(record)) {
+    if (typeof value !== "object" || value === null) continue;
+    const found = idOf(Array.isArray(value) ? value[0] : value, "", depth + 1);
+    if (found) return found;
   }
   return fallback;
 }

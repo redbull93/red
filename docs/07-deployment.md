@@ -53,9 +53,16 @@ it is faked**:
 
 ```bash
 npm run preflight            # which council seats are alive
+npm run seed:ambiguous       # stand-up thread + the evidence doc, in the real workspace
 npm run trigger:dev          # real retries, real waitpoints, local
 npm run dev                  # mission control on :3000
-cloudflared tunnel --url http://localhost:3000   # public URL for webhooks
+npm run seed:demo            # fill the board so /dungeon is not empty
+```
+
+Only add a tunnel if you specifically want to demo webhooks:
+
+```bash
+cloudflared tunnel --url http://localhost:3000
 ```
 
 `trigger.dev dev` is not a simulator. The cron, the retry backoff and the
@@ -63,8 +70,15 @@ waitpoints are the same platform machinery as production, just executing
 against your machine. A run genuinely suspends on an approval and
 genuinely resumes when someone clicks.
 
-The tunnel URL goes into the Ambiguous webhook config, pointed at
-`https://<tunnel>/api/ingest`.
+If you do tunnel, the URL goes into the Ambiguous webhook config pointed at
+`https://<tunnel>/api/ingest`. Otherwise skip it — see "a webhook is not
+the only way in" below.
+
+`npm run seed:demo` needs the dev server up first, because the engine store
+lives on `globalThis` inside whichever process owns it: seeding from a
+terminal would populate a store the web app never reads. Seeded runs are
+marked `demo: true` and the Dungeon badges them, so nothing hand-written
+can pass for something three models actually said.
 
 ---
 
@@ -119,9 +133,26 @@ tool loop runs up to six turns. `trigger.config.ts` allows 600s; a Vercel
 function will not. Keep the loop on Trigger.dev and let the UI only read
 and approve.
 
-**The webhook needs to be public before Ambiguous can reach it.**
-`localhost` is not reachable from their servers. Tunnel or deploy; there
-is no third option.
+**A webhook needs to be public — but a webhook is not the only way in.**
+This doc previously said "tunnel or deploy, there is no third option."
+That was wrong, and the spec says so: `GET /api/agents/{id}/transport`
+reports "whether a socket is currently registered on the `live` channel",
+and "an event that arrives while the agent is offline stays unread, so it
+is picked up from `GET /api/notifications` on the next connect."
+
+That is an **outbound** connection. The agent dials Ambiguous, so nothing
+has to be able to reach the agent, and no public URL is involved. Missed
+events are not dropped either — they queue as notifications and arrive on
+reconnect. So the third option is the good one:
+
+| Transport | Needs a public URL | Survives being offline |
+| --- | --- | --- |
+| Webhook → `/api/ingest` | Yes — tunnel or deploy | Depends on their retries |
+| Live socket + notification catch-up | **No** | Yes, queued as unread |
+
+Use the tunnel if you want to demo webhooks specifically. For a laptop on
+conference wifi, the socket is the safer bet: nothing to expose, and no
+tunnel URL to re-paste when it rotates mid-demo.
 
 ---
 
