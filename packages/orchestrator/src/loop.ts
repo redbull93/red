@@ -6,11 +6,13 @@ import {
 import { renderEnvironmentBlock, toAgentContext } from "./context";
 import { uid } from "./ids";
 import { cancelRunJobs, enqueueJob, setJobStatus } from "./jobs";
-import { completeTurn, type ChatMessage } from "./llm";
+import { completeTurn, type ChatMessage, type TurnContext } from "./llm";
 import { SYSTEM_PROMPT, TOOL_PREAMBLE } from "./prompts";
 import { emitAgUi } from "./ag-ui";
 import { getStore } from "./store";
 import { trace } from "./traces";
+import { recordBlockers, renderMemoryContext } from "./memory";
+import { validateAction } from "./guardrails";
 import type { Approval, EnvironmentEvent, Run } from "./types";
 
 const places = new Map<string, PlaceSnapshot>();
@@ -87,8 +89,26 @@ export async function ingestEnvironmentEvent(
   setJobStatus(job.id, "running");
   trace(run.id, "job", "Job running", job.title, { jobId: job.id });
 
+  // ── Cross-run memory: record blockers and inject prior context ──
+  const blockers = recordBlockers(
+    run.id,
+    event.channelId,
+    event.actors,
+    event.signalBody,
+  );
+  if (blockers.length > 0) {
+    trace(run.id, "context", "Blockers detected", `${blockers.length} blocker(s) recorded`, {
+      blockers: blockers.map((b) => ({ from: b.from, to: b.to, streak: b.streak })),
+    });
+  }
+
+  const memoryBlock = renderMemoryContext(event.channelId);
+  const systemContent = memoryBlock
+    ? `${SYSTEM_PROMPT}\n\n${TOOL_PREAMBLE}\n\n${memoryBlock}`
+    : `${SYSTEM_PROMPT}\n\n${TOOL_PREAMBLE}`;
+
   const messages: ChatMessage[] = [
-    { role: "system", content: `${SYSTEM_PROMPT}\n\n${TOOL_PREAMBLE}` },
+    { role: "system", content: systemContent },
     { role: "user", content: renderEnvironmentBlock(event) },
   ];
 
@@ -125,7 +145,9 @@ export async function ingestEnvironmentEvent(
 
   try {
     for (let step = 0; step < 6; step += 1) {
-      const turn = await completeTurn(messages);
+      // ── Usage tracking context ──
+      const turnCtx: TurnContext = { runId: run.id, turnIndex: step };
+      const turn = await completeTurn(messages, turnCtx);
       if (turn.text) {
         run.assistantText = turn.text;
         trace(run.id, "plan", turn.stub ? "Stub plan" : "Model plan", turn.text);
@@ -144,13 +166,22 @@ export async function ingestEnvironmentEvent(
         content: turn.text || "",
       });
 
-      for (const call of turn.toolCalls) {
-        if (call.name === "world.act" && event.requireHitl) {
-          run.status = "awaiting_hitl";
-          return run;
-        }
+      // ── Parallel tool dispatch ──
+      // Separate tools into serial (world.act — needs guardrails + HITL gate)
+      // and parallel (everything else can run concurrently).
+      const serialCalls = turn.toolCalls.filter((c) => c.name === "world.act");
+      const parallelCalls = turn.toolCalls.filter((c) => c.name !== "world.act");
 
-        const result = await dispatchTool(call.name, call.args, ctx);
+      // Dispatch independent tools concurrently
+      const parallelResults = await Promise.all(
+        parallelCalls.map(async (call) => {
+          const result = await dispatchTool(call.name, call.args, ctx);
+          return { call, result };
+        }),
+      );
+
+      // Process parallel results
+      for (const { call, result } of parallelResults) {
         if (result.receiptId) {
           trace(run.id, "receipt", "Receipt", result.receiptId, result.data);
         }
@@ -172,6 +203,63 @@ export async function ingestEnvironmentEvent(
         if (call.name === "health.retry") {
           setJobStatus(job.id, "running");
         }
+
+        messages.push({
+          role: "tool",
+          name: call.name,
+          tool_call_id: call.id,
+          content: JSON.stringify(result),
+        });
+      }
+
+      // Dispatch serial tools (world.act) with guardrails
+      for (const call of serialCalls) {
+        if (event.requireHitl) {
+          run.status = "awaiting_hitl";
+          return run;
+        }
+
+        // ── Guardrail validation ──
+        const guardrailResult = validateAction(call, event);
+        trace(run.id, "tool", "Guardrail check", guardrailResult.pass ? "passed" : "blocked", {
+          violations: guardrailResult.violations,
+        });
+
+        if (!guardrailResult.pass) {
+          // Guardrail blocked the action — treat as a soft failure
+          const blockReasons = guardrailResult.violations
+            .filter((v) => v.severity === "block")
+            .map((v) => v.detail)
+            .join("; ");
+
+          trace(run.id, "error", "Guardrail blocked", blockReasons);
+
+          messages.push({
+            role: "tool",
+            name: call.name,
+            tool_call_id: call.id,
+            content: JSON.stringify({
+              ok: false,
+              tool: call.name,
+              data: {},
+              error: `Guardrail blocked: ${blockReasons}`,
+            }),
+          });
+          continue;
+        }
+
+        const result = await dispatchTool(call.name, call.args, ctx);
+        if (result.receiptId) {
+          trace(run.id, "receipt", "Receipt", result.receiptId, result.data);
+        }
+
+        trace(
+          run.id,
+          result.ok ? "tool" : "error",
+          call.name,
+          result.ok ? "ok" : (result.error ?? "failed"),
+          result.data,
+        );
 
         messages.push({
           role: "tool",

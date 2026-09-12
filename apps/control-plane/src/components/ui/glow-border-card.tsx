@@ -7,6 +7,10 @@ export interface GlowBorderCardProps extends React.HTMLAttributes<HTMLDivElement
   children?: React.ReactNode;
   colorPreset?: "nature" | "ocean" | "sunset" | "aurora" | "custom";
   paused?: boolean;
+  width?: string;
+  inset?: string;
+  borderWidth?: string;
+  blurAmount?: string;
 }
 
 const colorPresets: Record<string, string[]> = {

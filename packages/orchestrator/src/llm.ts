@@ -1,4 +1,5 @@
 import { openaiToolDefinitions } from "@red/mcp-tools";
+import { recordUsage, recordStubUsage } from "./usage";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant" | "tool";
@@ -19,6 +20,11 @@ export type LlmTurn = {
   stub: boolean;
 };
 
+export type TurnContext = {
+  runId: string;
+  turnIndex: number;
+};
+
 type ChatCompletion = {
   choices?: Array<{
     message?: {
@@ -29,15 +35,25 @@ type ChatCompletion = {
       }>;
     };
   }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
 };
 
 export function hasModelKey() {
   return Boolean(process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY);
 }
 
-export async function completeTurn(messages: ChatMessage[]): Promise<LlmTurn> {
+export async function completeTurn(
+  messages: ChatMessage[],
+  ctx?: TurnContext,
+): Promise<LlmTurn> {
   if (!hasModelKey()) {
-    return stubTurn(messages);
+    const result = stubTurn(messages);
+    if (ctx) recordStubUsage(ctx.runId, ctx.turnIndex);
+    return result;
   }
 
   const openRouter = Boolean(process.env.OPENROUTER_API_KEY);
@@ -101,6 +117,11 @@ export async function completeTurn(messages: ChatMessage[]): Promise<LlmTurn> {
       args,
     };
   });
+
+  // Record token usage
+  if (ctx && json.usage) {
+    recordUsage(ctx.runId, ctx.turnIndex, model, json.usage);
+  }
 
   return {
     text: message?.content ?? "",
