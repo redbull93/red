@@ -1,0 +1,22 @@
+{
+  "name": "@red/mcp-tools",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "red-mcp": "./src/server.ts"
+  },
+  "scripts": {
+    "start": "npx tsx src/server.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.2"
+  }
+}
