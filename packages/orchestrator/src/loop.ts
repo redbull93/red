@@ -288,16 +288,18 @@ export async function ingestEnvironmentEvent(
 
 export async function resolveApproval(
   approvalId: string,
-  decision: "approved" | "stopped",
+  decision: "approved" | "approve" | "stopped" | "stop",
 ): Promise<Run | undefined> {
   const store = getStore();
   const approval = store.approvals.find((a) => a.id === approvalId);
   if (!approval || approval.status !== "pending") return undefined;
-  approval.status = decision;
+  
+  const isStop = decision === "stopped" || decision === "stop";
+  approval.status = isStop ? "stopped" : "approved";
   const run = store.runs.find((r) => r.id === approval.runId);
   if (!run) return undefined;
 
-  if (decision === "stopped") {
+  if (isStop) {
     run.status = "stopped";
     run.finishedAt = new Date().toISOString();
     cancelRunJobs(run.id);
