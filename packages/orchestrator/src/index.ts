@@ -16,8 +16,15 @@ export {
   getAllBlockers,
   extractBlockers,
 } from "./memory";
-export { validateAction, sanitizeSummary } from "./guardrails";
+export { validateAction, sanitizeSummary, validateApproverPermission } from "./guardrails";
 export { createRunStream, createGlobalStream, formatSseEvent } from "./stream";
-export { recordUsage, recordStubUsage, getRunUsage, getAllUsage } from "./usage";
+export {
+  recordUsage,
+  recordStubUsage,
+  getRunUsage,
+  getAllUsage,
+  getUsageByOrg,
+  getUsageByUser,
+} from "./usage";
 
 export type * from "./types";

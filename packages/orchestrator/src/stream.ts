@@ -106,6 +106,9 @@ export function createRunStream(
           cleanup();
         }
       }, heartbeatMs);
+      if (typeof heartbeatTimer?.unref === "function") {
+        heartbeatTimer.unref();
+      }
     },
 
     cancel() {

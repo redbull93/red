@@ -31,6 +31,8 @@ export type EnvironmentEvent = {
   principal?: string;
   requireHitl?: boolean;
   forceFail?: boolean;
+  orgId?: string;
+  authenticatedUser?: ApproverIdentity;
 };
 
 export type AgentContext = EnvironmentEvent & {
@@ -58,6 +60,15 @@ export type TraceEvent = {
   data?: Record<string, unknown>;
 };
 
+export type ApproverIdentity = {
+  userId: string;
+  email?: string;
+  name?: string;
+  roles?: string[];
+  permissions?: string[];
+  orgId?: string;
+};
+
 export type ApprovalStatus = "pending" | "approved" | "stopped" | "expired";
 
 export type Approval = {
@@ -69,8 +80,12 @@ export type Approval = {
   preview: string;
   risk: "low" | "medium" | "high";
   principal: string;
+  requiredRole?: string;
   status: ApprovalStatus;
   expiresAt: string;
+  resolvedBy?: ApproverIdentity;
+  resolvedAt?: string;
+  orgId?: string;
 };
 
 export type JobStatus =
@@ -98,6 +113,8 @@ export type Receipt = {
   channelId: string;
   body: string;
   at: string;
+  approvedBy?: ApproverIdentity;
+  orgId?: string;
 };
 
 export type RunStatus =
@@ -148,6 +165,8 @@ export type BlockerRecord = {
   streak: number;
   /** Whether it has been resolved by a receipt or explicit resolution. */
   resolved: boolean;
+  /** Organization tenancy ID (Auth0 Org). */
+  orgId?: string;
 };
 
 // ── Output Guardrails ─────────────────────────────────────────────
@@ -176,4 +195,6 @@ export type UsageRecord = {
   estimatedCostUsd: number;
   stub: boolean;
   at: string;
+  orgId?: string;
+  userId?: string;
 };

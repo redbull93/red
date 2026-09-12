@@ -7,8 +7,9 @@ import {
   onAgUi,
   getAllUsage,
   getAllBlockers,
+  getActiveBlockers,
 } from "./index";
-import type { EnvironmentEvent } from "./types";
+import type { ApproverIdentity, EnvironmentEvent } from "./types";
 
 // ── ANSI Color Helpers for Terminal Output ─────────────────────────
 const c = {
@@ -106,7 +107,7 @@ await runTest("2. Cross-Run Memory: Multi-Day Blocker Streak Detection", async (
   await ingestEnvironmentEvent(day1Event);
   await ingestEnvironmentEvent(day2Event);
 
-  const blockers = getAllBlockers("C-team-alpha");
+  const blockers = getActiveBlockers("C-team-alpha");
   assert(blockers.length > 0, "Expected at least one blocker to be detected for C-team-alpha");
 
   const aliceBlocker = blockers.find((b) => b.from === "alice" && b.to === "bob");
@@ -163,14 +164,22 @@ await runTest("5. HITL Interception & Approval Resolution", async () => {
   );
   assert(Boolean(pendingApproval), "Expected a pending approval in store");
 
-  // Approve the action
-  const resolvedRun = await resolveApproval(pendingApproval!.id, "approve");
+  // Approve the action with verified Auth0 approver identity
+  const approver: ApproverIdentity = {
+    userId: "auth0|64f123abc456",
+    email: "lead@acme.corp",
+    name: "Ada Lovelace",
+    roles: ["tech-lead", "member"],
+  };
+
+  const resolvedRun = await resolveApproval(pendingApproval!.id, "approve", approver);
   assert(resolvedRun?.status === "completed", `Expected status 'completed' after approval, got '${resolvedRun?.status}'`);
   
   const resolvedReceipts = store.receipts.filter((r) => r.runId === resolvedRun!.id);
   assert(resolvedReceipts.length > 0, "Expected receipt generated after approval");
+  assert(resolvedReceipts[0].approvedBy?.userId === "auth0|64f123abc456", "Expected receipt to record Auth0 approver");
 
-  return `Approval ${pendingApproval!.id} approved -> Run ${resolvedRun!.id} completed`;
+  return `Approval ${pendingApproval!.id} approved by ${approver.name} (${approver.userId}) -> Run ${resolvedRun!.id} completed`;
 });
 
 // Test 6: Real-time Ag-UI SSE Stream
@@ -190,6 +199,79 @@ await runTest("6. Ag-UI Streaming: SSE Stream & Event Dispatch", async () => {
   assert(eventCount > 0, `Expected Ag-UI events to be emitted, got ${eventCount}`);
 
   return `Dispatched and observed ${eventCount} realtime Ag-UI lifecycle events`;
+});
+
+// Test 7: Auth0 RBAC Guardrail Enforcement
+await runTest("7. Auth0 RBAC: Role-Based Approval Verification", async () => {
+  const highRiskEvent = fixtureEvent({
+    requireHitl: true,
+    urgency: "high",
+  });
+  const run = await ingestEnvironmentEvent(highRiskEvent);
+  const store = getStore();
+  const approval = store.approvals.find((a) => a.runId === run.id && a.status === "pending");
+  assert(Boolean(approval), "Expected high risk approval");
+  assert(approval?.requiredRole === "tech-lead", `Expected requiredRole 'tech-lead', got ${approval?.requiredRole}`);
+
+  // Test unauthorized approval attempt (dev role lacking tech-lead/admin)
+  let rejected = false;
+  try {
+    await resolveApproval(approval!.id, "approve", {
+      userId: "auth0|junior_dev",
+      email: "junior@acme.corp",
+      roles: ["junior-dev"],
+    });
+  } catch {
+    rejected = true;
+  }
+  assert(rejected, "Expected approval to be rejected for lacking required role");
+
+  // Test authorized approval (tech-lead role)
+  const authorizedRun = await resolveApproval(approval!.id, "approve", {
+    userId: "auth0|tech_lead_99",
+    email: "lead@acme.corp",
+    roles: ["tech-lead"],
+  });
+  assert(authorizedRun?.status === "completed", "Expected run to succeed with authorized role");
+
+  return `RBAC blocked unauthorized approver and allowed verified role 'tech-lead'`;
+});
+
+// Test 8: Multi-Tenant Scoping (Auth0 Organizations)
+await runTest("8. Multi-Tenancy: Auth0 Organization Memory & Ledger Scoping", async () => {
+  const org1Event: EnvironmentEvent = {
+    ...fixtureEvent(),
+    id: "evt_org1_day1",
+    orgId: "org_alpha_inc",
+    channelId: "C-standup",
+    signalBody: "Dave: Blocked on Emma for API key.",
+    actors: [
+      { id: "dave", role: "teammate", present: true, mayAct: true, language: "en" },
+      { id: "emma", role: "teammate", present: true, mayAct: true, language: "en" },
+    ],
+  };
+
+  const org2Event: EnvironmentEvent = {
+    ...fixtureEvent(),
+    id: "evt_org2_day1",
+    orgId: "org_beta_corp",
+    channelId: "C-standup",
+    signalBody: "Dave: All good, working on UI.",
+    actors: [
+      { id: "dave", role: "teammate", present: true, mayAct: true, language: "en" },
+    ],
+  };
+
+  await ingestEnvironmentEvent(org1Event);
+  await ingestEnvironmentEvent(org2Event);
+
+  const org1Blockers = getAllBlockers("org_alpha_inc");
+  const org2Blockers = getAllBlockers("org_beta_corp");
+
+  assert(org1Blockers.length > 0, "Expected blockers in org_alpha_inc");
+  assert(org2Blockers.length === 0, "Expected no blockers in org_beta_corp");
+
+  return `Isolated memory: org_alpha_inc has ${org1Blockers.length} blocker(s) while org_beta_corp has ${org2Blockers.length}`;
 });
 
 // ── Summary Report ────────────────────────────────────────────────

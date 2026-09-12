@@ -12,12 +12,12 @@ import { emitAgUi } from "./ag-ui";
 import { getStore } from "./store";
 import { trace } from "./traces";
 import { recordBlockers, renderMemoryContext } from "./memory";
-import { validateAction } from "./guardrails";
-import type { Approval, EnvironmentEvent, Run } from "./types";
+import { validateAction, validateApproverPermission } from "./guardrails";
+import type { Approval, ApproverIdentity, EnvironmentEvent, Run } from "./types";
 
 const places = new Map<string, PlaceSnapshot>();
 
-function toolContext(runId: string) {
+function toolContext(runId: string, orgId?: string, approver?: ApproverIdentity) {
   return {
     now: () => new Date(),
     readPlace: (channelId: string) => places.get(channelId) ?? null,
@@ -37,6 +37,8 @@ function toolContext(runId: string) {
         channelId: input.channelId,
         body: input.body,
         at: written.landedAt,
+        approvedBy: approver,
+        orgId,
       });
       return written;
     },
@@ -76,7 +78,7 @@ export async function ingestEnvironmentEvent(
     "signal",
     `Signal in ${event.environmentName}`,
     event.signalBody,
-    { kind: event.environmentKind, channelId: event.channelId },
+    { kind: event.environmentKind, channelId: event.channelId, orgId: event.orgId },
   );
   trace(
     run.id,
@@ -95,6 +97,7 @@ export async function ingestEnvironmentEvent(
     event.channelId,
     event.actors,
     event.signalBody,
+    event.orgId,
   );
   if (blockers.length > 0) {
     trace(run.id, "context", "Blockers detected", `${blockers.length} blocker(s) recorded`, {
@@ -102,7 +105,7 @@ export async function ingestEnvironmentEvent(
     });
   }
 
-  const memoryBlock = renderMemoryContext(event.channelId);
+  const memoryBlock = renderMemoryContext(event.channelId, event.orgId);
   const systemContent = memoryBlock
     ? `${SYSTEM_PROMPT}\n\n${TOOL_PREAMBLE}\n\n${memoryBlock}`
     : `${SYSTEM_PROMPT}\n\n${TOOL_PREAMBLE}`;
@@ -112,7 +115,7 @@ export async function ingestEnvironmentEvent(
     { role: "user", content: renderEnvironmentBlock(event) },
   ];
 
-  const ctx = toolContext(run.id);
+  const ctx = toolContext(run.id, event.orgId, event.authenticatedUser);
   const mayAct = event.actors.some((a) => a.mayAct);
   if (event.requireHitl || !mayAct) {
     const approval: Approval = {
@@ -125,15 +128,18 @@ export async function ingestEnvironmentEvent(
       proposedAction: "world.act",
       preview: event.signalBody.slice(0, 180),
       risk: event.urgency === "high" ? "high" : "medium",
+      requiredRole: event.urgency === "high" ? "tech-lead" : undefined,
       principal: event.principal ?? event.actors[0]?.id ?? "human",
       status: "pending",
       expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      orgId: event.orgId,
     };
     store.approvals.push(approval);
     run.status = "awaiting_hitl";
     setJobStatus(job.id, "queued");
     trace(run.id, "hitl", "Paused for approval", approval.reason, {
       approvalId: approval.id,
+      requiredRole: approval.requiredRole,
     });
     emitAgUi({
       type: "HitlRequired",
@@ -146,7 +152,12 @@ export async function ingestEnvironmentEvent(
   try {
     for (let step = 0; step < 6; step += 1) {
       // ── Usage tracking context ──
-      const turnCtx: TurnContext = { runId: run.id, turnIndex: step };
+      const turnCtx: TurnContext = {
+        runId: run.id,
+        turnIndex: step,
+        orgId: event.orgId,
+        userId: event.authenticatedUser?.userId,
+      };
       const turn = await completeTurn(messages, turnCtx);
       if (turn.text) {
         run.assistantText = turn.text;
@@ -289,41 +300,77 @@ export async function ingestEnvironmentEvent(
 export async function resolveApproval(
   approvalId: string,
   decision: "approved" | "approve" | "stopped" | "stop",
+  approver?: ApproverIdentity,
 ): Promise<Run | undefined> {
   const store = getStore();
   const approval = store.approvals.find((a) => a.id === approvalId);
   if (!approval || approval.status !== "pending") return undefined;
+
+  // RBAC permission check
+  const rbacCheck = validateApproverPermission(approval.requiredRole, approver);
+  if (!rbacCheck.pass) {
+    trace(
+      approval.runId,
+      "error",
+      "Approval unauthorized",
+      rbacCheck.violations.map((v) => v.detail).join("; "),
+      { requiredRole: approval.requiredRole, approver },
+    );
+    throw new Error(
+      `Permission Denied: ${rbacCheck.violations.map((v) => v.detail).join("; ")}`,
+    );
+  }
   
   const isStop = decision === "stopped" || decision === "stop";
   approval.status = isStop ? "stopped" : "approved";
+  approval.resolvedBy = approver;
+  approval.resolvedAt = new Date().toISOString();
+
   const run = store.runs.find((r) => r.id === approval.runId);
   if (!run) return undefined;
+
+  const approverLabel =
+    approver?.name ?? approver?.email ?? approver?.userId ?? "human";
 
   if (isStop) {
     run.status = "stopped";
     run.finishedAt = new Date().toISOString();
     cancelRunJobs(run.id);
-    const ctx = toolContext(run.id);
+    const ctx = toolContext(run.id, run.event.orgId, approver);
     await dispatchTool(
       "environment.receipt",
       {
         channelId: run.event.channelId,
-        body: "Stopped. Nothing else will run.",
+        body: `Stopped by ${approverLabel}. Nothing else will run.`,
       },
       ctx,
     );
-    trace(run.id, "hitl", "Stopped by human", "The human kept control.");
+    trace(
+      run.id,
+      "hitl",
+      "Stopped by human",
+      `Stopped by ${approverLabel}. The human kept control.`,
+      { approver },
+    );
     emitAgUi({ type: "RunFinished", run });
     return run;
   }
 
   run.event.requireHitl = false;
+  run.event.authenticatedUser = approver;
   run.status = "running";
-  trace(run.id, "hitl", "Approved", "Running the proposed act.");
+  trace(
+    run.id,
+    "hitl",
+    "Approved by human",
+    `Approved by ${approverLabel}. Running the proposed act.`,
+    { approver },
+  );
   return ingestEnvironmentEvent({
     ...run.event,
     id: uid("evt"),
     requireHitl: false,
+    authenticatedUser: approver,
   });
 }
 

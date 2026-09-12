@@ -60,6 +60,7 @@ export function recordUsage(
     completion_tokens?: number;
     total_tokens?: number;
   },
+  meta?: { orgId?: string; userId?: string },
 ): UsageRecord {
   const promptTokens = usage.prompt_tokens ?? 0;
   const completionTokens = usage.completion_tokens ?? 0;
@@ -75,6 +76,8 @@ export function recordUsage(
     estimatedCostUsd: estimateCost(model, promptTokens, completionTokens),
     stub: false,
     at: new Date().toISOString(),
+    orgId: meta?.orgId,
+    userId: meta?.userId,
   };
 
   getUsageStore().push(record);
@@ -85,7 +88,11 @@ export function recordUsage(
  * Records a stub turn (no API call). Tracks that the turn happened
  * but consumed zero tokens.
  */
-export function recordStubUsage(runId: string, turnIndex: number): UsageRecord {
+export function recordStubUsage(
+  runId: string,
+  turnIndex: number,
+  meta?: { orgId?: string; userId?: string },
+): UsageRecord {
   const record: UsageRecord = {
     runId,
     turnIndex,
@@ -96,6 +103,8 @@ export function recordStubUsage(runId: string, turnIndex: number): UsageRecord {
     estimatedCostUsd: 0,
     stub: true,
     at: new Date().toISOString(),
+    orgId: meta?.orgId,
+    userId: meta?.userId,
   };
 
   getUsageStore().push(record);
@@ -123,6 +132,20 @@ export function getRunUsage(runId: string): {
     totalCostUsd: turns.reduce((s, t) => s + t.estimatedCostUsd, 0),
     model: turns.find((t) => !t.stub)?.model ?? "stub",
   };
+}
+
+/**
+ * Returns all usage records attributed to an organization.
+ */
+export function getUsageByOrg(orgId: string): UsageRecord[] {
+  return getUsageStore().filter((r) => r.orgId === orgId);
+}
+
+/**
+ * Returns all usage records attributed to a user.
+ */
+export function getUsageByUser(userId: string): UsageRecord[] {
+  return getUsageStore().filter((r) => r.userId === userId);
 }
 
 /**

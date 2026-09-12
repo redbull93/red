@@ -96,6 +96,7 @@ export function recordBlockers(
   channelId: string,
   actors: Actor[],
   signalBody: string,
+  orgId?: string,
 ): BlockerRecord[] {
   const ledger = getLedger();
   const now = new Date().toISOString();
@@ -103,7 +104,9 @@ export function recordBlockers(
   const recorded: BlockerRecord[] = [];
 
   for (const { from, to, context } of extracted) {
-    const key = `${channelId}:${blockerKey(from, to)}`;
+    const key = orgId
+      ? `${orgId}:${channelId}:${blockerKey(from, to)}`
+      : `${channelId}:${blockerKey(from, to)}`;
     const existing = ledger.get(key);
 
     if (existing && !existing.resolved) {
@@ -126,6 +129,7 @@ export function recordBlockers(
         runIds: [runId],
         streak: 1,
         resolved: false,
+        orgId,
       };
       ledger.set(key, record);
       recorded.push(record);
@@ -138,12 +142,17 @@ export function recordBlockers(
 /**
  * Returns all unresolved blockers for a channel that have appeared in ≥2 runs.
  */
-export function getRecurringBlockers(channelId: string): BlockerRecord[] {
+export function getRecurringBlockers(
+  channelId: string,
+  orgId?: string,
+): BlockerRecord[] {
   const ledger = getLedger();
   const recurring: BlockerRecord[] = [];
 
   for (const record of ledger.values()) {
+    const matchesOrg = orgId ? record.orgId === orgId : true;
     if (
+      matchesOrg &&
       record.channelId === channelId &&
       !record.resolved &&
       record.streak >= 2
@@ -158,12 +167,16 @@ export function getRecurringBlockers(channelId: string): BlockerRecord[] {
 /**
  * Returns all unresolved blockers for a channel (any streak).
  */
-export function getActiveBlockers(channelId: string): BlockerRecord[] {
+export function getActiveBlockers(
+  channelId: string,
+  orgId?: string,
+): BlockerRecord[] {
   const ledger = getLedger();
   const active: BlockerRecord[] = [];
 
   for (const record of ledger.values()) {
-    if (record.channelId === channelId && !record.resolved) {
+    const matchesOrg = orgId ? record.orgId === orgId : true;
+    if (matchesOrg && record.channelId === channelId && !record.resolved) {
       active.push(record);
     }
   }
@@ -178,9 +191,12 @@ export function resolveBlocker(
   channelId: string,
   from: string,
   to: string,
+  orgId?: string,
 ): boolean {
   const ledger = getLedger();
-  const key = `${channelId}:${blockerKey(from, to)}`;
+  const key = orgId
+    ? `${orgId}:${channelId}:${blockerKey(from, to)}`
+    : `${channelId}:${blockerKey(from, to)}`;
   const record = ledger.get(key);
   if (!record || record.resolved) return false;
 
@@ -192,8 +208,11 @@ export function resolveBlocker(
  * Renders an XML memory context block for injection into the LLM prompt.
  * Only includes unresolved blockers so the model can reference prior history.
  */
-export function renderMemoryContext(channelId: string): string {
-  const active = getActiveBlockers(channelId);
+export function renderMemoryContext(
+  channelId: string,
+  orgId?: string,
+): string {
+  const active = getActiveBlockers(channelId, orgId);
   if (active.length === 0) return "";
 
   const entries = active.map((b) => {
@@ -223,6 +242,8 @@ ${entries.join("\n")}
 /**
  * Returns all blocker records (for snapshot / dashboard).
  */
-export function getAllBlockers(): BlockerRecord[] {
-  return [...getLedger().values()];
+export function getAllBlockers(orgId?: string): BlockerRecord[] {
+  const all = [...getLedger().values()];
+  if (!orgId) return all;
+  return all.filter((b) => b.orgId === orgId);
 }

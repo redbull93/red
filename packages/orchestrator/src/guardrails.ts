@@ -1,4 +1,4 @@
-import type { AgentContext, GuardrailResult, GuardrailViolation } from "./types";
+import type { AgentContext, ApproverIdentity, GuardrailResult, GuardrailViolation } from "./types";
 import type { PlannedTool } from "./llm";
 
 // ── Guardrail rules ───────────────────────────────────────────────
@@ -240,3 +240,51 @@ export function sanitizeSummary(summary: string, event: AgentContext): string {
     return match; // Keep by default — only flag in violations, don't mutate
   });
 }
+
+/**
+ * Validates whether an approver has the necessary Auth0 roles or permissions
+ * to resolve a Human-In-The-Loop approval.
+ */
+export function validateApproverPermission(
+  requiredRole?: string,
+  approver?: ApproverIdentity,
+): GuardrailResult {
+  const violations: GuardrailViolation[] = [];
+
+  if (!requiredRole) {
+    return {
+      pass: true,
+      violations: [],
+      checkedAt: new Date().toISOString(),
+    };
+  }
+
+  if (!approver) {
+    violations.push({
+      rule: "unauthenticated_approver",
+      detail: `Action requires role "${requiredRole}" but no authenticated approver was provided.`,
+      severity: "block",
+    });
+  } else {
+    const roles = approver.roles ?? [];
+    const isAuthorized =
+      roles.includes(requiredRole) ||
+      roles.includes("admin") ||
+      roles.includes("tech-lead");
+
+    if (!isAuthorized) {
+      violations.push({
+        rule: "insufficient_role",
+        detail: `Approver "${approver.name ?? approver.userId}" lacks required role "${requiredRole}". Roles present: [${roles.join(", ")}]`,
+        severity: "block",
+      });
+    }
+  }
+
+  return {
+    pass: violations.length === 0,
+    violations,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
