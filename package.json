@@ -13,13 +13,15 @@
     "loop": "npm run demo --workspace=@red/orchestrator --",
     "loop:fail": "npm run demo --workspace=@red/orchestrator -- --fail",
     "loop:hitl": "npm run demo --workspace=@red/orchestrator -- --hitl",
+    "test": "npm run test --workspace=@red/orchestrator",
     "smoke:openai": "npm run smoke --workspace=@red/ai",
     "slack": "npm run start --workspace=@red/slack-adapter",
     "discord": "npm run start --workspace=@red/discord-adapter",
     "discord:deploy": "npm run deploy --workspace=@red/discord-adapter",
     "bots": "npm run start --workspace=@red/bots",
     "seed": "npx tsx scripts/seed.ts",
-    "loop:agent": "npx tsx scripts/loop.ts"
+    "loop:agent": "npx tsx scripts/loop.ts",
+    "test:e2e": "npx tsx scripts/e2e-test.ts"
   },
   "engines": {
     "node": ">=20"

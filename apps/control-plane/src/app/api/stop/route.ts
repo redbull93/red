@@ -1,4 +1,5 @@
 import { resolveApproval } from "@red/orchestrator";
+import { updateActionStatus } from "@red/database";
 import { NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/lib/auth";
 
@@ -14,6 +15,7 @@ export async function POST(request: Request) {
 
   try {
     const run = await resolveApproval(body.approvalId, "stopped", approver);
+    await updateActionStatus(body.approvalId, "rejected").catch(() => null);
     return NextResponse.json({ run, approver });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

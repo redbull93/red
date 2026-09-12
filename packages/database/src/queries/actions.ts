@@ -7,8 +7,25 @@ import { getSupabaseClient } from "../client";
 import { getMemoryStore } from "../memory-store";
 
 export async function createPendingAction(
-  action: PendingActionRecord,
+  actionInput: Partial<PendingActionRecord> & Pick<PendingActionRecord, "workspaceId" | "standupId" | "type" | "message" | "requiresApproval">,
 ): Promise<PendingActionRecord> {
+  const generatedId = actionInput.id || `act_${Math.random().toString(36).substring(2, 11)}`;
+  let action: PendingActionRecord = {
+    id: generatedId,
+    workspaceId: actionInput.workspaceId,
+    standupId: actionInput.standupId,
+    type: actionInput.type,
+    targetUserId: actionInput.targetUserId,
+    platform: actionInput.platform,
+    message: actionInput.message,
+    status: actionInput.status ?? "pending",
+    requiresApproval: actionInput.requiresApproval,
+    payload: actionInput.payload,
+    error: actionInput.error,
+    createdAt: actionInput.createdAt ?? new Date().toISOString(),
+    executedAt: actionInput.executedAt,
+  };
+
   const client = getSupabaseClient();
   if (client) {
     const { data, error } = await client

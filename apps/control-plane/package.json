@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@auth0/nextjs-auth0": "^4.29.0",
     "@red/agent": "*",
     "@red/database": "*",
     "@red/github": "*",

@@ -1,4 +1,5 @@
 import { fixtureEvent, ingestEnvironmentEvent } from "@red/orchestrator";
+import { createAgentEvent } from "@red/database";
 import { NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/lib/auth";
 
@@ -28,6 +29,13 @@ export async function POST(request: Request) {
       authenticatedUser: user,
     }),
   );
+
+  await createAgentEvent({
+    id: `evt_${Date.now()}`,
+    workspaceId: "ws_slack_demo",
+    eventType: `ingest.${body.mode ?? "loop"}`,
+    payload: { runId: run.id, user: user?.userId },
+  }).catch(() => null);
 
   return NextResponse.json({ run, user });
 }

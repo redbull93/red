@@ -1,4 +1,5 @@
-import { listPendingActions, updateActionStatus } from "@red/database";
+import { getAction, listPendingActions, updateActionStatus } from "@red/database";
+import { handleActionDecision, type AgentPlatformPort } from "@red/agent";
 import type { PendingActionStatus } from "@red/shared";
 import { NextResponse } from "next/server";
 
@@ -25,6 +26,27 @@ export async function POST(request: Request) {
       { error: "Missing actionId or decision" },
       { status: 400 },
     );
+  }
+
+  const existing = await getAction(body.actionId);
+  if (existing) {
+    const stubPort: AgentPlatformPort = {
+      sendDM: async (p, uid, text) => {
+        console.log(`[Control Plane Action DM -> @${uid}]:`, text);
+      },
+      postToChannel: async (p, ch, text) => {
+        console.log(`[Control Plane Action Channel #${ch}]:`, text);
+        return { messageTs: String(Date.now()) };
+      },
+    };
+
+    const result = await handleActionDecision(
+      body.actionId,
+      body.decision,
+      body.approver || "admin",
+      stubPort,
+    );
+    return NextResponse.json({ action: result.action, message: result.message, success: result.success });
   }
 
   const updated = await updateActionStatus(
