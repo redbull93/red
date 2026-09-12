@@ -1,117 +1,255 @@
 # StandUp Agent
 
-An AI teammate that runs your daily stand-up — inside Slack and Discord, where your team already works.
+An AI teammate that runs your daily stand-up — inside **Slack and Discord**,
+where your team already works.
 
-Built for [AI Tinkerers Hackathon](https://aitinkerers.org/) — Nairobi.
+Built for [Agents, Everywhere](https://nairobi.aitinkerers.org/p/agents-everywhere-bots-channels-more-global-hackathon)
+(AI Tinkerers x OpenAI) — Nairobi.
 
-## The idea
+| Field | Value |
+| --- | --- |
+| Who | Engineering teams that already stand up in Slack/Discord |
+| Where | Slack DMs + channel · Discord DMs + channel |
+| Why a chatbox dies | The agent needs **all teammates' updates in one place at once** — thread presence, who replied, who is named — a paste into ChatGPT will never be the morning ritual |
+| Loop | schedule → DM three questions → collect → cross-reference → **receipt in the team channel** |
+| Control | Approve before posting a suggested action · Stop cancels the job |
 
-Most AI stand-up bots collect and format updates. StandUp Agent goes further: it **reasons across teammates' updates** to catch blockers and dependencies that nobody explicitly flagged — then tells the right person what to do next.
+## Who this is for
 
-That cross-referencing step — not just summarizing, but *connecting* — is what makes this an agent rather than a formatter.
+A small product team that already lives in one Slack or Discord channel. They do not want another dashboard to check.
 
-### Example
+Most AI stand-up bots collect and format updates. StandUp Agent goes further:
+it **reasons across teammates' updates** to catch blockers and dependencies
+that nobody explicitly flagged — then tells the right person what to do next.
 
-> **Eugene:** "Can't finish the dashboard until I get the API endpoint from Brian."
+Three people in this walkthrough:
+
+- **Eugene** — building the dashboard; waiting on an API
+- **Brian** — finished the endpoint; has not sent the docs
+- **Mustafa** — landing page and pitch; nothing blocked
+
+The bot is a teammate in that workspace. It DMs people privately, then writes one message back to the **team channel**. The control-plane screen is theater for traces and approvals — **not** the home.
+
+## A morning with StandUp
+
+### 1. Stand-up starts
+
+On weekdays at **08:00 Africa/Nairobi** the schedule fires. Anyone in the channel can also run `/standup`.
+
+From the team's point of view: stand-up started. Nobody opens a web app. Nobody copies updates into a form.
+
+### 2. Each person gets a DM
+
+The bot opens a 1:1. It does not dump three questions at once. It asks, waits, then asks again:
+
+1. What did you finish?
+2. What are you working on?
+3. What's blocking you?
+
+Eugene's DM looks like this:
+
+> **StandUp:** What did you finish?
 >
-> **Brian:** "API endpoint is done, just haven't sent Eugene the docs yet."
-
-StandUp connects the two and posts to the channel:
-
-> **Stand-up summary**
+> **Eugene:** Layout work on the dashboard.
 >
-> Dashboard development is blocked on API documentation. Brian has completed the endpoint but hasn't shared it with Eugene yet.
+> **StandUp:** What are you working on?
 >
-> **Suggested action:** Brian → send API docs to Eugene.
+> **Eugene:** Still the dashboard.
 >
-> Everything else is on track.
+> **StandUp:** What's blocking you?
+>
+> **Eugene:** Can't finish the dashboard until I get the API endpoint from Brian.
 
-Teams don't need another dashboard to check. Agents are leaving the chatbox — StandUp shows up in Slack and Discord, asks three questions at a set time, and does the thinking so the team doesn't have to piece it together manually.
+Brian and Mustafa get the same three questions in their own DMs.
 
-## How it works
+### 3. People type what they know — not what others need
 
-1. **Trigger.dev** fires a scheduled job each morning.
-2. The bot **DMs each teammate** three questions:
-   - What did you finish?
-   - What are you working on?
-   - What's blocking you?
-3. Replies are stored in **Supabase**.
-4. Once responses are in, all of them are sent together to an **LLM** (OpenAI) for cross-referencing — detecting explicit blockers, implicit dependencies (someone mentioned but who didn't reciprocate), and overdue items.
-5. **Exa** can enrich a blocker with already-resolved context (a PR, a prior thread) before the summary goes out.
-6. The bot posts a **formatted summary** back to the team channel, with a suggested next action if something is blocked.
+**Eugene**
+
+- Finished: layout work on the dashboard
+- Working on: the dashboard
+- Blocking: waiting on Brian's API endpoint / docs
+
+**Brian**
+
+- Finished: the API endpoint
+- Working on: cleanup on another ticket
+- Blocking: nothing — he does not realize Eugene is waiting
+
+**Mustafa**
+
+- Finished: landing-page copy
+- Working on: the pitch deck
+- Blocking: nothing
+
+The hidden dependency: Eugene named Brian. Brian did not reciprocate. A formatter would reprint three check-ins. The channel would still not know who should move.
+
+### 4. One message in the team channel
+
+When the last reply is in, **one** message lands in the shared channel — not a private report, not three threaded updates.
+
+```
+Stand-up summary
+
+Dashboard development is blocked on API documentation. Brian has
+completed the endpoint but hasn't shared it with Eugene yet.
+
+Suggested action: Brian → send API docs to Eugene.
+
+On track: Mustafa's landing-page / pitch work.
+```
+
+Suggested actions that ping a person can pause for **HITL** (Approve / Stop) before they go out.
+
+### 5. What the agent did
+
+- Connected Eugene's blocker to Brian's "I shipped it"
+- Named a next action and an owner
+- Dropped Mustafa's update as noise, not a third blocker
+
+That connecting step — not summarizing, but *connecting* — is what makes this an agent rather than a formatter.
+
+## Why this lives in Slack and Discord
+
+Agents are leaving the chatbox. The questions, the wait, and the summary all happen where the team already works. Rip StandUp out of Slack/Discord and paste three updates into ChatGPT and you lose the morning ritual, who has not replied, and the cost of a wrong @mention. That is why a standalone chatbox dies.
+
+## How the pieces support that morning
+
+1. **Trigger.dev** starts the morning (or `/standup` does).
+2. **Slack or Discord** DMs each teammate and is the channel receipt.
+3. Replies become one environment event (and optionally land in **Supabase**).
+4. The **orchestrator** sends all updates together to **OpenAI / OpenRouter**.
+5. **Exa** can enrich a blocker with a PR or prior thread.
+6. The bot posts the summary back to the **same** team channel.
+7. Pings can pause for Approve / Stop on the control plane.
 
 ```mermaid
 sequenceDiagram
   participant Trigger as TriggerDev
   participant Adapter as SlackOrDiscord
-  participant Store as Supabase
-  participant LLM as OpenAI
+  participant Orch as Orchestrator
+  participant MCP as MCPTools
   participant Exa as Exa
   Trigger->>Adapter: scheduled stand-up
   Adapter->>Adapter: DM three questions
-  Adapter->>Store: save replies
-  Store->>LLM: all updates together
-  LLM->>Exa: enrich blockers
-  LLM->>Adapter: summary plus next action
-  Adapter->>Adapter: post to team channel
+  Adapter->>Orch: all updates as environment event
+  Orch->>MCP: world.act cross-reference
+  Orch->>Exa: enrich blockers
+  Orch->>Adapter: summary plus next action
+  Adapter->>Adapter: receipt in team channel
 ```
 
-## Architecture
+## What we are building (for role assignment)
 
-Monorepo, shared core logic, two thin platform adapters:
+**Frontend** is what a human sees: Slack/Discord, plus the optional mission-control UI.
+**Backend** is the loop after replies exist: orchestrator, tools, model, schedule.
 
 ```
-standup-agent/
-├── packages/
-│   ├── core/              # platform-agnostic: scheduling, reasoning, storage
-│   ├── slack-adapter/     # Slack Bolt app — DMs, channel posts, Block Kit
-│   └── discord-adapter/   # discord.js bot — DMs, channel posts, embeds
+red/
+├── apps/control-plane/     # frontend (theater) — traces, Approve / Stop
+├── packages/orchestrator/  # backend — event → plan → tools → HITL → traces
+├── packages/mcp-tools/     # backend — environment I/O, Exa, act+receipt, fail
+├── prompts/                # backend — stand-up-aware prompts
+└── docs/                   # pitch — judging, architecture, runbook, demo
 ```
 
-The reasoning engine does not know or care which platform an update came from. Both adapters ask questions, collect answers, and hand off to the same `core` logic. One team, two front doors.
+Slack/Discord adapters (still to wire) plug into `ingestEnvironmentEvent`.
+Do not demo only the control-plane screen.
 
-## Tech stack
+### Backend
 
-- **OpenAI** — core reasoning: blocker and dependency detection across teammates' updates
-- **Exa** — enrich blockers with repo/history context and relevant links (for example a PR)
-- **Trigger.dev** — scheduled daily stand-up trigger
-- **Auth0** — auth for an optional web dashboard (stand-up history)
-- **Google Cloud Run** — backend deploy
-- **Slack (Bolt SDK)** — messaging adapter
-- **Discord (discord.js)** — messaging adapter
-- **Supabase** — team data and daily responses
+Owns the morning after the replies exist. Does not know Slack from Discord.
 
-## Demo script
+| Work package | What it is | Suggested owner |
+| --- | --- | --- |
+| Orchestrator | `packages/orchestrator` — ingest updates, plan, call the model, emit traces | Immaculate |
+| Reasoning / prompts | OpenAI / OpenRouter + `prompts/` — find Eugene ↔ Brian, name `assignee → action` | Immaculate |
+| MCP tools | `packages/mcp-tools` — environment I/O, Exa search, act+receipt, health/fail | Immaculate |
+| Storage | Optional Supabase for today's answers | Immaculate |
+| Schedule | Trigger.dev at 08:00 Africa/Nairobi (job stub in `jobs.ts` today) | Emmanuel |
 
-1. Three teammates receive the daily DM prompt.
-2. Two of them have a hidden dependency (one mentions waiting on the other; the other does not realize they are needed).
-3. The third has a routine, unrelated update — no blockers.
-4. StandUp posts the summary: correctly isolates the real blocker, ignores the noise, and suggests the specific next action.
+### Frontend
+
+Owns what a human sees and types.
+
+| Work package | What a user sees | Suggested owner |
+| --- | --- | --- |
+| Slack adapter | 1:1 DMs (one question at a time), `/standup`, Block Kit channel receipt | Emmanuel |
+| Discord adapter | Same flow: DMs, `/standup`, embed in the team channel | Emmanuel |
+| Control plane | `apps/control-plane` — traces, Approve / Stop, two-minute video theater | Emmanuel |
+| Product copy | Question wording, summary header, “Suggested action” line | Mustafa |
+
+### Pitch / demo
+
+| Work package | What it is | Suggested owner |
+| --- | --- | --- |
+| Story and demo | Walk judges through this morning; hit the hidden dependency | Mustafa |
+| Docs | `docs/04-demo-script.md`, sponsor one-liners, social post | Mustafa |
+
+Change names in the tables if you reassign. The cut is: **orchestrator + tools = backend**, **adapters + control plane = frontend**, **docs + walkthrough = pitch**.
+
+## If something goes wrong
+
+- Someone never answers: the channel stays quiet; stand-up is still collecting.
+- The model is down: the fixture still names Brian → Eugene from the obvious name mention.
+- No Exa key: the same summary posts, with no extra link.
+- A suggested ping is risky: HITL pauses for Approve / Stop.
+
+## Repo layout (runnable kit)
+
+See [`docs/02-architecture.md`](docs/02-architecture.md) and
+[`docs/05-standup-agent.md`](docs/05-standup-agent.md).
+
+## Run
+
+```bash
+cp .env.example apps/control-plane/.env.local
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+- **Run fixture loop** — Eugene/Brian/Amina stand-up → act → channel receipt
+- **Pause for HITL** — Approve / Stop before a suggested action
+- **Force fail + retry** — demo the failure beat
+
+```bash
+npm run loop          # CLI: one stand-up fixture
+npm run loop:fail
+npm run loop:hitl
+npm run mcp           # stdio MCP tool server
+```
+
+Empty API keys are honest stubs. Set keys before you film for a higher
+Technical Execution score.
+
+## Demo script (two minutes)
+
+See [`docs/04-demo-script.md`](docs/04-demo-script.md). Film order:
+
+1. Slack/Discord channel (or fixture that *looks* like it)
+2. Three DM replies with the hidden Eugene↔Brian dependency
+3. Agent acts → summary **receipt in the channel**
+4. Fail → retry → Stop
+5. Two breaths of mission control
+6. One line: this dies in a standalone chatbox
 
 ## Team
 
-- **Immaculate Munde** — Technical (agent logic, integrations)
-- **Emmanuel** — Technical
-- **Mustafa** — Business / pitch
+Starting split (change names in the tables above if you reassign):
 
-## Status
+- **Immaculate Munde** — Backend: orchestrator, prompts, MCP tools, OpenAI/Exa
+- **Emmanuel** — Frontend: Slack + Discord adapters, control plane; Trigger.dev
+- **Mustafa** — Pitch, demo walkthrough, product copy
 
-Hackathon MVP — README and spec first; implementation next.
+## Submission checklist
 
-Adapters are not runnable yet. Do not expect `pnpm` workspace commands to start Slack or Discord bots.
-
-## Environment keys to collect
-
-Implementation is not started. Teammates can gather these keys in the meantime:
-
-- `OPENAI_API_KEY`
-- `EXA_API_KEY`
-- `SLACK_BOT_TOKEN`
-- `SLACK_SIGNING_SECRET`
-- `DISCORD_BOT_TOKEN`
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
-- `TRIGGER_API_KEY`
+1. Title — StandUp Agent
+2. Written description — who, Slack/Discord, why context matters
+3. Public GitHub — this repo
+4. Two-minute video
+5. Social post tagging OpenAI, CopilotKit, OpenRouter, Exa, Trigger.dev, Auth0, Mozilla, Ambiguous
 
 ## License
 
