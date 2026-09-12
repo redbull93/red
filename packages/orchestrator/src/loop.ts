@@ -15,28 +15,48 @@ import type { Approval, EnvironmentEvent, Run } from "./types";
 
 const places = new Map<string, PlaceSnapshot>();
 
+export type ReceiptInput = {
+  channelId: string;
+  body: string;
+  receiptId?: string;
+};
+
+export type ReceiptSink = (input: ReceiptInput) => Promise<void> | void;
+
+let receiptSink: ReceiptSink | undefined;
+
+/** Slack/Discord adapters register this so environment.receipt lands in the place. */
+export function setReceiptSink(sink: ReceiptSink | undefined) {
+  receiptSink = sink;
+}
+
 function toolContext(runId: string) {
+  const pending: Promise<unknown>[] = [];
   return {
-    now: () => new Date(),
-    readPlace: (channelId: string) => places.get(channelId) ?? null,
-    writeReceipt: (input: {
-      channelId: string;
-      body: string;
-      receiptId?: string;
-    }) => {
-      const existing = places.get(input.channelId);
-      const memory = createMemoryPlace(existing ?? undefined);
-      const written = memory.writeReceipt(input);
-      const next = memory.readPlace(input.channelId);
-      if (next) places.set(input.channelId, next);
-      getStore().receipts.push({
-        id: written.receiptId,
-        runId,
-        channelId: input.channelId,
-        body: input.body,
-        at: written.landedAt,
-      });
-      return written;
+    ctx: {
+      now: () => new Date(),
+      readPlace: (channelId: string) => places.get(channelId) ?? null,
+      writeReceipt: (input: ReceiptInput) => {
+        const existing = places.get(input.channelId);
+        const memory = createMemoryPlace(existing ?? undefined);
+        const written = memory.writeReceipt(input);
+        const next = memory.readPlace(input.channelId);
+        if (next) places.set(input.channelId, next);
+        getStore().receipts.push({
+          id: written.receiptId,
+          runId,
+          channelId: input.channelId,
+          body: input.body,
+          at: written.landedAt,
+        });
+        if (receiptSink) {
+          pending.push(Promise.resolve(receiptSink({ ...input, ...written })));
+        }
+        return written;
+      },
+    },
+    flush: async () => {
+      await Promise.all(pending);
     },
   };
 }
@@ -92,7 +112,7 @@ export async function ingestEnvironmentEvent(
     { role: "user", content: renderEnvironmentBlock(event) },
   ];
 
-  const ctx = toolContext(run.id);
+  const { ctx, flush } = toolContext(run.id);
   const mayAct = event.actors.some((a) => a.mayAct);
   if (event.requireHitl || !mayAct) {
     const approval: Approval = {
@@ -135,6 +155,7 @@ export async function ingestEnvironmentEvent(
         run.status = "completed";
         run.finishedAt = new Date().toISOString();
         setJobStatus(job.id, "succeeded");
+        await flush();
         emitAgUi({ type: "RunFinished", run });
         return run;
       }
@@ -185,6 +206,7 @@ export async function ingestEnvironmentEvent(
     run.status = "completed";
     run.finishedAt = new Date().toISOString();
     setJobStatus(job.id, "succeeded");
+    await flush();
     emitAgUi({ type: "RunFinished", run });
     return run;
   } catch (error) {
@@ -213,7 +235,7 @@ export async function resolveApproval(
     run.status = "stopped";
     run.finishedAt = new Date().toISOString();
     cancelRunJobs(run.id);
-    const ctx = toolContext(run.id);
+    const { ctx, flush } = toolContext(run.id);
     await dispatchTool(
       "environment.receipt",
       {
@@ -222,6 +244,7 @@ export async function resolveApproval(
       },
       ctx,
     );
+    await flush();
     trace(run.id, "hitl", "Stopped by human", "The human kept control.");
     emitAgUi({ type: "RunFinished", run });
     return run;

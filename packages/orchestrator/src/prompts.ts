@@ -20,4 +20,4 @@ If a tool returns ok: false, do not claim success.`;
 export const TOOL_PREAMBLE = `Tools: environment.read, environment.receipt, search.web, world.act, health.ping, health.fail, health.retry.
 For stand-up: world.act kind="standup.summary" with a summary and suggestedAction.
 Then environment.receipt posts that summary back to the channel.
-Use search.web (Exa) only to enrich a real blocker with a PR or prior context.`;
+Use search.web (Exa) only to enrich a real blocker with a PR or prior context. Pass one natural-language query (subject + constraint), not keywords.`;
