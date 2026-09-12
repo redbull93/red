@@ -154,24 +154,42 @@ async function councilPass(
   return verdict;
 }
 
+/**
+ * Names the reason that actually caused the pause, in the order the loop checks
+ * them. Getting this order wrong is not cosmetic: a run paused by policy was
+ * reporting "only 1 model answered", which sends whoever reads the approval card
+ * chasing a quota problem that had nothing to do with it.
+ */
 function approvalReason(input: {
   mayAct: boolean;
   requireHitl?: boolean;
   verdict?: CouncilVerdict;
 }): string {
   if (!input.mayAct) return "No actor on this event may act.";
+
   if (input.verdict?.dissent.length) {
     const contested = input.verdict.dissent
       .map((c) => `${c.text} (only ${c.agreedBy.join(", ")})`)
       .join("; ");
     return `The council split. Contested: ${contested}`;
   }
+
+  if (input.requireHitl) {
+    // The council standing is still worth stating, but as context rather than as
+    // the cause.
+    const context = input.verdict?.unverified
+      ? ` Council was uncorroborated (${input.verdict.seated.length} of ${input.verdict.opinions.length} answered).`
+      : "";
+    return `Policy: irreversible or flagged act needs a human.${context}`;
+  }
+
   if (input.verdict?.unverified) {
     const abstained = input.verdict.abstained
       .map((a) => `${a.label} ${a.reason}`)
       .join("; ");
     return `Only ${input.verdict.seated.length} model answered, so nothing was corroborated. ${abstained}`;
   }
+
   return "Policy: irreversible or flagged act needs a human.";
 }
 
@@ -277,7 +295,9 @@ export async function ingestEnvironmentEvent(
       expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
       orgId: event.orgId,
       dissent: verdict?.dissent.length ? verdict.dissent : undefined,
-      opinions: councilPause ? verdict?.opinions : undefined,
+      // Attached whatever triggered the pause: whoever is deciding should see
+      // where the council stood, not only the claims that were contested.
+      opinions: verdict?.opinions,
     };
     store.approvals.push(approval);
     run.status = "awaiting_hitl";

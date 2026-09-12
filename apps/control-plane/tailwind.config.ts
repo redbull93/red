@@ -13,6 +13,10 @@ const config: Config = {
       colors: {
         ink: "#07070a",
         ash: "#121218",
+        // Referenced as bg-ember / text-ember across the app but never defined,
+        // so every accent silently rendered as nothing.
+        ember: "#f97316",
+        torch: "#fbbf24",
       },
       keyframes: {
         "aurora-bg": {
