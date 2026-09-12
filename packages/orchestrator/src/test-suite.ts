@@ -9,7 +9,33 @@ import {
   getAllBlockers,
   getActiveBlockers,
 } from "./index";
-import type { ApproverIdentity, EnvironmentEvent } from "./types";
+import { openaiToolDefinitions } from "@red/mcp-tools";
+import { buildVerdict, needsHuman } from "./council";
+import { fromWireToolName, normalizeBase, toWireToolName } from "./router";
+import { loadRuntimeEnv } from "./runtime-env";
+import type { ApproverIdentity, EnvironmentEvent, ModelOpinion } from "./types";
+
+// ── Determinism ───────────────────────────────────────────────────
+// This suite asserts on orchestrator behaviour, so it runs against the stub
+// planner rather than live models. Real models make it slow (a single test hit
+// two minutes) and flaky (whether the planner calls world.act is not
+// deterministic), and Agent Router rations two of the three seats anyway.
+//
+// Live reachability is checked separately by `npm run preflight`.
+// Set STANDUP_TEST_LIVE=1 to run against the real gateway instead.
+loadRuntimeEnv();
+if (!/^(1|true|yes|on)$/i.test(process.env.STANDUP_TEST_LIVE ?? "")) {
+  process.env.COUNCIL_ENABLED = "0";
+  for (const key of [
+    "AGENT_ROUTER_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "AI_GATEWAY_API_KEY",
+    "MODEL_API_KEY",
+  ]) {
+    delete process.env[key];
+  }
+}
 
 // ── ANSI Color Helpers for Terminal Output ─────────────────────────
 const c = {
@@ -272,6 +298,143 @@ await runTest("8. Multi-Tenancy: Auth0 Organization Memory & Ledger Scoping", as
   assert(org2Blockers.length === 0, "Expected no blockers in org_beta_corp");
 
   return `Isolated memory: org_alpha_inc has ${org1Blockers.length} blocker(s) while org_beta_corp has ${org2Blockers.length}`;
+});
+
+// Test 9: Council consensus engine (offline — no model calls)
+await runTest("9. Council: Consensus, Dissent & Abstention Arithmetic", async () => {
+  const dep = (waiter: string, blocker: string, artifact: string) => ({
+    waiter,
+    blocker,
+    artifact,
+  });
+  const seat = (
+    id: string,
+    dependencies: Array<{ waiter: string; blocker: string; artifact: string }>,
+  ): ModelOpinion => ({
+    seat: id,
+    label: id.toUpperCase(),
+    model: `${id}-test`,
+    status: "answered",
+    blockers: [],
+    dependencies,
+    suggestedAction: "Brian sends docs to Eugene",
+    confidence: 0.9,
+    latencyMs: 1,
+  });
+
+  // All three name eugene->brian; only one also names amina->brian.
+  const verdict = buildVerdict(
+    [
+      seat("gpt", [dep("eugene", "brian", "API docs")]),
+      seat("opus", [dep("eugene", "brian", "API documentation")]),
+      seat("deepseek", [
+        dep("eugene", "brian", "endpoint docs"),
+        dep("amina", "brian", "billing review"),
+      ]),
+    ],
+    false,
+  );
+
+  assert(verdict.seated.length === 3, `Expected 3 seated, got ${verdict.seated.length}`);
+  assert(
+    verdict.consensus.length === 1,
+    `Expected 1 unanimous claim, got ${verdict.consensus.length}`,
+  );
+  assert(
+    verdict.consensus[0].key === "eugene->brian",
+    `Expected consensus on eugene->brian, got ${verdict.consensus[0].key}`,
+  );
+  assert(verdict.dissent.length === 1, `Expected 1 contested claim, got ${verdict.dissent.length}`);
+  assert(
+    verdict.dissent[0].agreedBy.length === 1,
+    "Expected the contested claim to have exactly one backer",
+  );
+  assert(needsHuman(verdict), "A split council must escalate to a human");
+  assert(!verdict.unverified, "Three seats is a quorum");
+
+  // Differently-worded artifacts must not manufacture fake dissent.
+  const agreed = buildVerdict(
+    [
+      seat("gpt", [dep("eugene", "brian", "API docs")]),
+      seat("opus", [dep("Eugene", "Brian", "the API documentation")]),
+    ],
+    false,
+  );
+  assert(
+    agreed.consensus.length === 1 && agreed.dissent.length === 0,
+    "Same dependency phrased differently must still count as agreement",
+  );
+  assert(!needsHuman(agreed), "A unanimous council should not need a human");
+
+  // An abstaining seat must not be counted as agreement.
+  const thin = buildVerdict(
+    [
+      seat("deepseek", [dep("eugene", "brian", "API docs")]),
+      {
+        seat: "gpt",
+        label: "GPT",
+        model: "gpt-test",
+        status: "abstained",
+        abstainReason: "quota exhausted",
+        blockers: [],
+        dependencies: [],
+        suggestedAction: "",
+        confidence: 0,
+        latencyMs: 1,
+      },
+    ],
+    false,
+  );
+  assert(thin.seated.length === 1, "An abstention must not be seated");
+  assert(thin.abstained.length === 1, "The abstention must be reported");
+  assert(thin.unverified, "One seat is not a quorum");
+  assert(
+    !needsHuman(thin),
+    "Lacking quorum must not block by default, or rationed models would gate every stand-up",
+  );
+
+  return `3-seat split escalated; artifact wording ignored; 1-seat verdict marked unverified`;
+});
+
+// Test 10: Agent Router wire encoding for dotted MCP tool names
+await runTest("10. Agent Router: Dotted Tool Name Wire Encoding", async () => {
+  const names = ["world.act", "environment.receipt", "health.ping", "search.web"];
+  const pattern = /^[a-zA-Z0-9_-]+$/;
+
+  for (const name of names) {
+    const wire = toWireToolName(name);
+    assert(
+      pattern.test(wire),
+      `'${wire}' still violates the gateway's tool-name pattern`,
+    );
+    assert(
+      fromWireToolName(wire) === name,
+      `Round trip broke: ${name} -> ${wire} -> ${fromWireToolName(wire)}`,
+    );
+  }
+
+  // Every real tool the model is offered must survive the round trip, or
+  // dispatchTool will not recognise what comes back.
+  for (const def of openaiToolDefinitions()) {
+    const original = def.function.name;
+    assert(
+      fromWireToolName(toWireToolName(original)) === original,
+      `Registered tool '${original}' does not round trip`,
+    );
+  }
+
+  // Trailing slashes silently produced a double slash, which the gateway
+  // answered with its HTML console instead of the API.
+  assert(
+    normalizeBase("https://agentrouter.org/") === "https://agentrouter.org",
+    "Trailing slash must be stripped from the base URL",
+  );
+  assert(
+    normalizeBase("https://agentrouter.org/v1") === "https://agentrouter.org",
+    "A /v1 suffix must be stripped from the base URL",
+  );
+
+  return `${openaiToolDefinitions().length} registered tools round trip; base URL normalized`;
 });
 
 // ── Summary Report ────────────────────────────────────────────────

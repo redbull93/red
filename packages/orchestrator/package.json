@@ -12,7 +12,8 @@
   "dependencies": {
     "@red/mcp-tools": "*",
     "@red/shared": "*",
-    "@red/ai": "*"
+    "@red/ai": "*",
+    "@trigger.dev/sdk": "4.5.16"
   },
   "devDependencies": {
     "tsx": "^4.20.0",
