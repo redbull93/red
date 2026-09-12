@@ -13,14 +13,18 @@ export {
   summarizeVerdict,
 } from "./council";
 export {
+  callModel,
   describeFailure,
+  fromWireToolName,
   hasRouterKey,
   modelForSeat,
+  normalizeBase,
   routerConfig,
   SEAT_IDS,
   SEAT_LABELS,
+  toWireToolName,
 } from "./router";
-export type { SeatId, RouterFailure } from "./router";
+export type { SeatId, RouterFailure, RouterResult } from "./router";
 export { listVerdicts, loadVerdict, saveVerdict } from "./verdict-cache";
 export { loadRuntimeEnv } from "./runtime-env";
 export { createRunStream, createGlobalStream, formatSseEvent } from "./stream";

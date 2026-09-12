@@ -21,7 +21,10 @@
     "bots": "npm run start --workspace=@red/bots",
     "seed": "npx tsx scripts/seed.ts",
     "loop:agent": "npx tsx scripts/loop.ts",
-    "test:e2e": "npx tsx scripts/e2e-test.ts"
+    "test:e2e": "npx tsx scripts/e2e-test.ts",
+    "preflight": "npx tsx scripts/preflight.ts",
+    "council:capture": "npx tsx scripts/capture-council.ts",
+    "council:replay": "COUNCIL_REPLAY=1 npm run demo --workspace=@red/orchestrator --"
   },
   "engines": {
     "node": ">=20"

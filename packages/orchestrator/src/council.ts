@@ -233,7 +233,9 @@ function matchActor(name: string, actorIds: string[]): string | null {
  * waiting on whom is the claim that matters.
  */
 function claimKey(dep: Dependency): string {
-  return `${dep.waiter}->${dep.blocker}`;
+  // Case-folded so the key does not depend on upstream canonicalization having
+  // already run. "Eugene" and "eugene" are one claim, not two.
+  return `${dep.waiter.toLowerCase()}->${dep.blocker.toLowerCase()}`;
 }
 
 export function buildVerdict(opinions: ModelOpinion[], cached: boolean): CouncilVerdict {
