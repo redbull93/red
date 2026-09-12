@@ -1,5 +1,7 @@
 import { fixtureEvent, ingestEnvironmentEvent } from "@red/orchestrator";
+import { createAgentEvent } from "@red/database";
 import { NextResponse } from "next/server";
+import { getAuthenticatedUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +12,10 @@ export async function POST(request: Request) {
     environmentKind?: string;
     signalBody?: string;
     placeOnlyContext?: string;
+    orgId?: string;
   };
+
+  const user = await getAuthenticatedUser(request);
 
   const run = await ingestEnvironmentEvent(
     fixtureEvent({
@@ -20,8 +25,17 @@ export async function POST(request: Request) {
       placeOnlyContext: body.placeOnlyContext,
       requireHitl: body.mode === "hitl",
       forceFail: body.mode === "fail",
+      orgId: body.orgId ?? user?.orgId,
+      authenticatedUser: user,
     }),
   );
 
-  return NextResponse.json({ run });
+  await createAgentEvent({
+    id: `evt_${Date.now()}`,
+    workspaceId: "ws_slack_demo",
+    eventType: `ingest.${body.mode ?? "loop"}`,
+    payload: { runId: run.id, user: user?.userId },
+  }).catch(() => null);
+
+  return NextResponse.json({ run, user });
 }

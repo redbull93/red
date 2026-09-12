@@ -1,158 +1,143 @@
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ChannelType,
   Client,
-  EmbedBuilder,
+  Events,
   GatewayIntentBits,
+  Partials,
   REST,
   Routes,
   SlashCommandBuilder,
 } from "discord.js";
-import {
-  fixtureEvent,
-  ingestEnvironmentEvent,
-  setReceiptSink,
-} from "@red/orchestrator";
-import {
-  allComplete,
-  clearSession,
-  nextQuestion,
-  recordAnswer,
-  sessionForUser,
-  STANDUP_QUESTIONS,
-  startSession,
-} from "../../slack-adapter/src/collect.ts";
-import { sessionToEvent } from "../../slack-adapter/src/to-event.ts";
+import type { EnvironmentEvent } from "@red/shared";
 
-const token = process.env.DISCORD_BOT_TOKEN?.trim();
-if (!token) {
-  throw new Error("Missing DISCORD_BOT_TOKEN in .env");
+export interface DiscordAdapterOptions {
+  token: string;
+  clientId: string;
+  guildId?: string;
+  onEvent: (event: EnvironmentEvent) => Promise<void>;
 }
 
-const defaultChannel = process.env.DISCORD_STANDUP_CHANNEL?.trim();
+export class DiscordAdapter {
+  private client: Client;
 
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.DirectMessages,
-    GatewayIntentBits.MessageContent,
-  ],
-});
-
-setReceiptSink(async ({ channelId, body }) => {
-  const channel = await client.channels.fetch(channelId);
-  if (!channel || !channel.isTextBased() || channel.isDMBased()) return;
-  const embed = new EmbedBuilder()
-    .setTitle("Stand-up summary")
-    .setDescription(body.slice(0, 4000))
-    .setColor(0x111111);
-  await channel.send({ embeds: [embed] });
-});
-
-const commands = [
-  new SlashCommandBuilder()
-    .setName("standup")
-    .setDescription("DM this channel's members the three stand-up questions"),
-  new SlashCommandBuilder()
-    .setName("standup-demo")
-    .setDescription("Post the Eugene/Brian fixture summary in this channel"),
-].map((c) => c.toJSON());
-
-async function runCollected(channelId: string, event: ReturnType<typeof fixtureEvent>) {
-  await ingestEnvironmentEvent({
-    ...event,
-    channelId,
-    environmentName: "Discord stand-up",
-    environmentKind: "discord",
-  });
-}
-
-client.once("ready", async () => {
-  const rest = new REST({ version: "10" }).setToken(token);
-  if (client.user) {
-    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-  }
-  console.log(`StandUp Discord running as ${client.user?.tag}. /standup in any invited server channel.`);
-});
-
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-  const channelId = interaction.channelId || defaultChannel;
-  if (!channelId) {
-    await interaction.reply({
-      content: "Run this in a channel or set DISCORD_STANDUP_CHANNEL.",
-      ephemeral: true,
+  constructor(private readonly opts: DiscordAdapterOptions) {
+    this.client = new Client({
+      intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.MessageContent,
+      ],
+      partials: [Partials.Channel],
     });
-    return;
+
+    this.register();
   }
 
-  if (interaction.commandName === "standup-demo") {
-    await interaction.deferReply({ ephemeral: true });
-    await runCollected(channelId, fixtureEvent({ channelId }));
-    await interaction.editReply("Demo posted in this channel.");
-    return;
-  }
+  private register() {
+    this.client.once(Events.ClientReady, (c) => {
+      console.log(`Discord ready as ${c.user.tag}`);
+    });
 
-  if (interaction.commandName === "standup") {
-    await interaction.deferReply({ ephemeral: true });
-    const humans: Array<{ userId: string; displayName: string }> = [];
-    const guild = interaction.guild;
-    if (guild) {
-      const members = await guild.members.fetch();
-      for (const member of members.values()) {
-        if (member.user.bot) continue;
-        humans.push({
-          userId: member.id,
-          displayName: member.displayName,
-        });
-      }
-    }
-    if (humans.length === 0) {
-      humans.push({
-        userId: interaction.user.id,
-        displayName: interaction.user.displayName,
+    this.client.on(Events.MessageCreate, async (message) => {
+      if (message.author.bot) return;
+
+      const isDM = message.channel.type === ChannelType.DM;
+
+      await this.opts.onEvent({
+        type: isDM ? "dm.received" : "message.received",
+        platform: "discord",
+        workspaceId: message.guildId ?? "dm",
+        channelId: message.channelId,
+        userId: message.author.id,
+        text: message.content,
+        messageId: message.id,
+        timestamp: message.createdAt.toISOString(),
+        raw: { isDM },
       });
-    }
-    startSession(channelId, humans);
-    let messaged = 0;
-    for (const person of humans) {
-      try {
-        const user = await client.users.fetch(person.userId);
-        await user.send(STANDUP_QUESTIONS[0].text);
-        messaged += 1;
-      } catch {
-        // User may have DMs closed
+    });
+
+    this.client.on(Events.InteractionCreate, async (interaction) => {
+      if (!interaction.isButton() && !interaction.isChatInputCommand()) return;
+
+      if (interaction.isButton()) {
+        await interaction.deferUpdate().catch(() => {});
       }
+
+      await this.opts.onEvent({
+        type: "interaction.received",
+        platform: "discord",
+        workspaceId: interaction.guildId ?? "dm",
+        channelId: interaction.channelId ?? "unknown",
+        userId: interaction.user.id,
+        text: interaction.isChatInputCommand()
+          ? interaction.commandName
+          : interaction.customId,
+        messageId: interaction.id,
+        timestamp: new Date().toISOString(),
+        raw: {
+          customId: interaction.isButton() ? interaction.customId : undefined,
+        },
+      });
+    });
+  }
+
+  async start() {
+    await this.client.login(this.opts.token);
+  }
+
+  async sendDM(userId: string, content: string) {
+    const user = await this.client.users.fetch(userId);
+    await user.send(content);
+  }
+
+  async postToChannel(channelId: string, content: string) {
+    const channel = await this.client.channels.fetch(channelId);
+    if (channel?.isTextBased()) {
+      await (channel as any).send(content);
     }
-    await interaction.editReply(
-      `Stand-up started. DMed ${messaged} person(s). Invite this bot to another server/channel and run /standup there.`,
+  }
+
+  async requestApproval(channelId: string, actionId: string, text: string) {
+    const channel = await this.client.channels.fetch(channelId);
+    if (!channel?.isTextBased()) return;
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`approve_action:${actionId}`)
+        .setLabel("Approve")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`stop_action:${actionId}`)
+        .setLabel("Stop")
+        .setStyle(ButtonStyle.Danger),
     );
-  }
-});
 
-client.on("messageCreate", async (message) => {
-  if (message.author.bot) return;
-  if (message.channel.type !== ChannelType.DM) return;
-  const userId = message.author.id;
-  if (!sessionForUser(userId)) return;
-
-  recordAnswer(userId, message.content.trim());
-  const followUp = nextQuestion(userId);
-  if (followUp) {
-    await message.reply(followUp);
-    return;
+    await (channel as any).send({ content: text, components: [row] });
   }
-  const session = sessionForUser(userId);
-  if (!session || !allComplete(session)) {
-    await message.reply("Thanks — waiting on the rest of the team.");
-    return;
-  }
-  await message.reply("Got it. Posting the summary to the team channel.");
-  const event = sessionToEvent(session);
-  const channelId = session.receiptChannelId;
-  clearSession(session);
-  await runCollected(channelId, event);
-});
+}
 
-await client.login(token);
+export async function deployDiscordCommands(opts: {
+  token: string;
+  clientId: string;
+  guildId: string;
+}) {
+  const commands = [
+    new SlashCommandBuilder()
+      .setName("standup")
+      .setDescription("Start the daily stand-up")
+      .toJSON(),
+  ];
+
+  const rest = new REST({ version: "10" }).setToken(opts.token);
+
+  await rest.put(
+    Routes.applicationGuildCommands(opts.clientId, opts.guildId),
+    { body: commands },
+  );
+
+  console.log("Discord commands deployed successfully");
+}

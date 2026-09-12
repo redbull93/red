@@ -1,4 +1,5 @@
 import { openaiToolDefinitions } from "@red/mcp-tools";
+import { recordUsage, recordStubUsage } from "./usage";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant" | "tool";
@@ -19,6 +20,13 @@ export type LlmTurn = {
   stub: boolean;
 };
 
+export type TurnContext = {
+  runId: string;
+  turnIndex: number;
+  orgId?: string;
+  userId?: string;
+};
+
 type ChatCompletion = {
   choices?: Array<{
     message?: {
@@ -29,10 +37,20 @@ type ChatCompletion = {
       }>;
     };
   }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
 };
 
 export function hasModelKey() {
-  return Boolean(process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY);
+  return Boolean(
+    process.env.OPENAI_API_KEY ||
+      process.env.OPENROUTER_API_KEY ||
+      process.env.AI_GATEWAY_API_KEY ||
+      process.env.MODEL_API_KEY,
+  );
 }
 
 export async function completePlain(
@@ -44,8 +62,12 @@ export async function completePlain(
   const openRouter = Boolean(process.env.OPENROUTER_API_KEY);
   const url = openRouter
     ? "https://openrouter.ai/api/v1/chat/completions"
-    : "https://api.openai.com/v1/chat/completions";
-  const key = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
+    : `${process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1"}/chat/completions`;
+  const key =
+    process.env.OPENROUTER_API_KEY ||
+    process.env.OPENAI_API_KEY ||
+    process.env.AI_GATEWAY_API_KEY ||
+    process.env.MODEL_API_KEY;
   const model = openRouter
     ? process.env.OPENROUTER_MODEL || "openai/gpt-4.1-mini"
     : process.env.OPENAI_MODEL || "gpt-4.1-mini";
@@ -77,56 +99,58 @@ export async function completePlain(
   return text || null;
 }
 
-export async function completeTurn(messages: ChatMessage[]): Promise<LlmTurn> {
-  if (!hasModelKey()) {
+export async function completeTurn(
+  messages: ChatMessage[],
+  ctx?: TurnContext,
+): Promise<LlmTurn> {
+  let model = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
+  const apiKey =
+    process.env.OPENAI_API_KEY ??
+    process.env.OPENROUTER_API_KEY ??
+    process.env.AI_GATEWAY_API_KEY ??
+    process.env.MODEL_API_KEY;
+
+  if (!apiKey) {
+    if (ctx) {
+      recordStubUsage(ctx.runId, ctx.turnIndex, {
+        orgId: ctx.orgId,
+        userId: ctx.userId,
+      });
+    }
     return stubTurn(messages);
   }
 
   const openRouter = Boolean(process.env.OPENROUTER_API_KEY);
-  const url = openRouter
-    ? "https://openrouter.ai/api/v1/chat/completions"
-    : "https://api.openai.com/v1/chat/completions";
-  const key = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
-  const model = openRouter
-    ? process.env.OPENROUTER_MODEL || "openai/gpt-4.1-mini"
-    : process.env.OPENAI_MODEL || "gpt-4.1-mini";
+  const baseURL = openRouter
+    ? "https://openrouter.ai/api/v1"
+    : (process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1");
 
-  const response = await fetch(url, {
+  if (openRouter && !model.includes("/")) {
+    model = `openai/${model}`;
+  }
+
+  const response = await fetch(`${baseURL}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${key}`,
-      ...(openRouter
-        ? {
-            "HTTP-Referer": "https://github.com/redbull93/red",
-            "X-Title": "red environment-first kit",
-          }
-        : {}),
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model,
-      messages: messages.map((m) => {
-        if (m.role === "tool") {
-          return {
-            role: "tool",
-            tool_call_id: m.tool_call_id,
-            content: m.content,
-          };
-        }
-        return { role: m.role, content: m.content };
-      }),
+      messages,
       tools: openaiToolDefinitions(),
       tool_choice: "auto",
     }),
   });
 
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`LLM ${response.status}: ${detail.slice(0, 400)}`);
+    const errorText = await response.text();
+    throw new Error(`OpenAI API error (${response.status}): ${errorText}`);
   }
 
   const json = (await response.json()) as ChatCompletion;
-  const message = json.choices?.[0]?.message;
+  const choice = json.choices?.[0];
+  const message = choice?.message;
   const toolCalls: PlannedTool[] = (message?.tool_calls ?? []).map((call) => {
     let args: Record<string, unknown> = {};
     try {
@@ -144,37 +168,19 @@ export async function completeTurn(messages: ChatMessage[]): Promise<LlmTurn> {
     };
   });
 
+  // Record token usage
+  if (ctx && json.usage) {
+    recordUsage(ctx.runId, ctx.turnIndex, model, json.usage, {
+      orgId: ctx.orgId,
+      userId: ctx.userId,
+    });
+  }
+
   return {
     text: message?.content ?? "",
     toolCalls,
     stub: false,
   };
-}
-
-function statusReceiptFromSignal(body: string): string {
-  const signal =
-    body.match(/<signal type="channel.status">([\s\S]*?)<\/signal>/)?.[1] ??
-    "";
-  const lines = signal
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith("Someone asked"));
-  if (lines.length === 0 || /no recent human messages/i.test(signal)) {
-    return "This channel is quiet — no recent human messages to read.";
-  }
-  const latest = new Map<string, string>();
-  for (const line of lines) {
-    const match = line.match(/^([^:]+):\s*(.+)$/);
-    if (match) latest.set(match[1], match[2].slice(0, 220));
-  }
-  if (latest.size === 0) {
-    return "I read this channel but could not parse a project status yet.";
-  }
-  return [
-    "*Project status from this channel*",
-    "",
-    ...[...latest.entries()].map(([name, text]) => `• *${name}:* ${text}`),
-  ].join("\n");
 }
 
 function stubTurn(messages: ChatMessage[]): LlmTurn {
@@ -184,7 +190,6 @@ function stubTurn(messages: ChatMessage[]): LlmTurn {
   const requireHitl = /(?:^|\n)\s*require_hitl:\s*true/.test(body);
   const channel =
     body.match(/<channel id="([^"]+)"/)?.[1] ?? "fixture-thread";
-  const signalType = body.match(/<signal type="([^"]+)">/)?.[1];
 
   if (messages.some((m) => m.role === "tool")) {
     const toolPayloads = messages.filter((m) => m.role === "tool");
@@ -209,28 +214,21 @@ function stubTurn(messages: ChatMessage[]): LlmTurn {
       !toolPayloads.some((t) => t.content.includes("environment.receipt"))
     ) {
       const receiptId = last.match(/"receiptId":"([^"]+)"/)?.[1] ?? "";
-      const statusBody =
-        signalType === "channel.status" ? statusReceiptFromSignal(body) : "";
       return {
-        text:
-          signalType === "channel.status"
-            ? "Posting the channel status back to the team."
-            : "Posting the stand-up summary back to the team channel.",
+        text: "Posting the stand-up summary back to the team channel.",
         toolCalls: [
           {
             id: "stub_receipt",
             name: "environment.receipt",
             args: {
               channelId: channel,
-              body:
-                statusBody ||
-                [
-                  "*Stand-up summary*",
-                  "",
-                  "Dashboard is blocked on API docs. Brian finished the endpoint but has not shared docs with Eugene.",
-                  "*Suggested action:* Brian → send API docs to Eugene.",
-                  "Amina is on track.",
-                ].join("\n"),
+              body: [
+                "*Stand-up summary*",
+                "",
+                "Dashboard is blocked on API docs. Brian finished the endpoint but has not shared docs with Eugene.",
+                "*Suggested action:* Brian → send API docs to Eugene.",
+                "Amina is on track.",
+              ].join("\n"),
               receiptId,
             },
           },
@@ -253,24 +251,6 @@ function stubTurn(messages: ChatMessage[]): LlmTurn {
           id: "stub_fail",
           name: "health.fail",
           args: { reason: "Synthetic failure for the demo path" },
-        },
-      ],
-      stub: true,
-    };
-  }
-
-  if (signalType === "channel.status") {
-    const summary = statusReceiptFromSignal(body);
-    return {
-      text: "Read the channel transcript. Posting current project status.",
-      toolCalls: [
-        {
-          id: "stub_status_act",
-          name: "world.act",
-          args: {
-            kind: "channel.status",
-            summary,
-          },
         },
       ],
       stub: true,

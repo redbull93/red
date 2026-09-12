@@ -2,11 +2,17 @@
   "name": "@red/discord-adapter",
   "version": "0.1.0",
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
-    "dev": "npx tsx --env-file=../../.env src/index.ts"
+    "dev": "npx tsx --env-file=../../.env src/bot.ts",
+    "start": "npx tsx src/start.ts",
+    "deploy": "npx tsx src/deploy-commands.ts"
   },
   "dependencies": {
     "@red/orchestrator": "*",
+    "@red/shared": "*",
     "discord.js": "^14.22.1"
   },
   "devDependencies": {
