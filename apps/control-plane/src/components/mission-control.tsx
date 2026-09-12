@@ -102,12 +102,15 @@ export function MissionControl() {
     };
   }, [refresh]);
 
-  async function fire(mode: "loop" | "hitl" | "fail") {
+  async function fire(
+    mode: "loop" | "hitl" | "fail",
+    envKind: "slack" | "discord" | "whatsapp" = "slack",
+  ) {
     setBusy(true);
     await fetch("/api/ingest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode }),
+      body: JSON.stringify({ mode, environmentKind: envKind }),
     });
     await refresh();
     setBusy(false);
@@ -152,13 +155,15 @@ export function MissionControl() {
             <h1 className="mt-2 font-display text-4xl leading-none tracking-tight md:text-6xl">
               The agent lives
               <span className="block bg-gradient-to-r from-sky-300 via-fuchsia-300 to-teal-200 bg-clip-text text-transparent">
-                in Slack & Discord.
+                in Slack, Discord & WhatsApp.
               </span>
             </h1>
           </div>
           <div className="flex flex-wrap gap-2">
-            <FireButton disabled={busy} onClick={() => void fire("loop")} label="Run stand-up loop" />
-            <FireButton disabled={busy} onClick={() => void fire("hitl")} label="Pause @-mention HITL" tone="warn" />
+            <FireButton disabled={busy} onClick={() => void fire("loop", "slack")} label="Slack loop" />
+            <FireButton disabled={busy} onClick={() => void fire("loop", "whatsapp")} label="WhatsApp loop" />
+            <FireButton disabled={busy} onClick={() => void fire("loop", "discord")} label="Discord loop" />
+            <FireButton disabled={busy} onClick={() => void fire("hitl")} label="Pause HITL" tone="warn" />
             <FireButton disabled={busy} onClick={() => void fire("fail")} label="Force fail + retry" tone="danger" />
           </div>
         </header>
@@ -215,7 +220,7 @@ export function MissionControl() {
           <div className="animate-ticker flex w-[200%] gap-12 whitespace-nowrap font-mono text-[11px] uppercase tracking-[0.28em] text-zinc-400">
             {Array.from({ length: 8 }).map((_, i) => (
               <span key={i}>
-                standup · slack · discord · cross-reference · channel receipt ·
+                standup · slack · discord · whatsapp · cross-reference · channel receipt ·
                 do not demo only this screen ·
               </span>
             ))}
@@ -233,8 +238,8 @@ export function MissionControl() {
           >
             <SectionLabel>Stand-up signals</SectionLabel>
             <p className="mb-4 font-mono text-[11px] text-zinc-500">
-              Fixture: Eugene / Brian / Amina. Wire Slack or Discord before you
-              film.
+              Fixture: Eugene / Brian / Amina. Wire Slack, Discord, or WhatsApp
+              before you film.
             </p>
             <Feed
               empty="No signal yet. Fire a fixture."
@@ -357,12 +362,12 @@ export function MissionControl() {
           borderWidth="0.55em"
           blurAmount="0.4em"
         >
-          <SectionLabel>Channel receipts (must land in Slack/Discord)</SectionLabel>
+          <SectionLabel>Channel receipts (must land in Slack, Discord, or WhatsApp)</SectionLabel>
           <div className="mt-2 flex flex-wrap gap-3">
             {state.receipts.length === 0 && (
               <p className="text-sm text-zinc-500">
                 After world.act, environment.receipt writes the stand-up summary
-                back to #standup. If this list grows and Slack does not, you
+                back to the team channel. If this list grows and your platform does not, you
                 are filming theater.
               </p>
             )}

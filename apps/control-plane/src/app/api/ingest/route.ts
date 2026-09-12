@@ -16,13 +16,34 @@ export async function POST(request: Request) {
   };
 
   const user = await getAuthenticatedUser(request);
+  const envKind = body.environmentKind ?? "slack";
+  const envName =
+    body.environmentName ??
+    (envKind === "whatsapp"
+      ? "WhatsApp StandUp Group"
+      : envKind === "discord"
+        ? "Discord #standup"
+        : "Slack #standup");
+  const channelId =
+    envKind === "whatsapp"
+      ? "whatsapp-group-eng"
+      : envKind === "discord"
+        ? "C-discord-standup"
+        : "C-standup";
 
   const run = await ingestEnvironmentEvent(
     fixtureEvent({
-      environmentName: body.environmentName ?? "Slack #standup",
-      environmentKind: body.environmentKind ?? "slack",
+      environmentName: envName,
+      environmentKind: envKind,
+      channelId,
       signalBody: body.signalBody,
-      placeOnlyContext: body.placeOnlyContext,
+      placeOnlyContext:
+        body.placeOnlyContext ??
+        (envKind === "whatsapp"
+          ? "Three WhatsApp voice notes/texts summarized from the team group. Eugene waiting on Brian; Brian completed endpoint but didn't notify Eugene. A standalone chatbot would never receive this group context."
+          : envKind === "discord"
+            ? "Three Discord stand-up replies collected in #standup thread. Eugene blocked on Brian's API. Receipt must return to Discord."
+            : undefined),
       requireHitl: body.mode === "hitl",
       forceFail: body.mode === "fail",
       orgId: body.orgId ?? user?.orgId,
